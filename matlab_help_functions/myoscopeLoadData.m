@@ -1,4 +1,4 @@
-function data = myoscopeLoadData(fileName)
+function sig = myoscopeLoadData(path2data, path2roi)
 % LOADCOMPARTMENTMODEL load compartment model 
 %   model = LOADCOMPARTMENTMODEL(filename)
 %   returns a multi-compartment object with given configurations.
@@ -9,13 +9,23 @@ function data = myoscopeLoadData(fileName)
 % Email: m.farzi@leeds.ac.uk
 
 % check arguments
-if ~isfile(fileName)
+if ~isfile(path2data)
     error('MATLAB:loadCompartmentModel:fileIsNotFound', ...
-          'File does not exist:\n%s', fileName);
+          'File does not exist:\n%s', path2data);
 end
 
-load(fileName, 's');
-data = s;
+if ~isfile(path2roi) && ~isempty(path2roi)
+    error('MATLAB:loadCompartmentModel:fileIsNotFound', ...
+          'File does not exist:\n%s', path2roi);
+end
+
+load(path2data, 'data');
+if isempty(path2roi)
+    sig = data;
+else
+    idx = roi(roi>0);
+    sig = data(:, idx);
+end
 end % of loadCompartmentModel
 
 
