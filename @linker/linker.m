@@ -419,7 +419,7 @@ classdef linker < handle
                 if obj(idx).linked == 1
                     idx1 = idx;
                     idx2 = obj(idx).crossLinkNo;
-                    constraintList = [constraintList; sprintf('%s<=%s', obj(idx1).name, obj(idx2).name)];
+                    constraintList = [constraintList; sprintf('%s>=%s', obj(idx2).name, obj(idx1).name)];
                 end
             end
         end
