@@ -1,4 +1,4 @@
-function  [property, flag] = searchConfig(fileName, varargin)
+function  property = searchConfig(fileName, varargin)
 % SEARCHCONFIG search the model Config File 
 %   property = SEARCHCONFIG(fileName, varargin) 
 %   returns the properties of interest.
@@ -10,7 +10,13 @@ function  [property, flag] = searchConfig(fileName, varargin)
 
 % Mohsen Farzi
 % Email: m.farzi@leeds.ac.uk
-
+%--------------------------------------------------------------------------
+% check the number of arguments
+if nargin<2
+    error('MATLAB:loadCompartmentModel:InsufficientInputArgument', ...
+          'Not enough input arguments.');
+end
+    
 % check arguments
 if ~isfile(fileName)
     error('MATLAB:loadCompartmentModel:fileIsNotFound', ...
@@ -25,7 +31,6 @@ fclose(fileId);
 
 % Allocate memory for output variables
 nProps = nargin -1;
-flag = zeros(nProps, 1);
 property = initProperty(varargin{:});
 
 % search for each property
@@ -34,14 +39,25 @@ for idx = 1:nProps
         case 'name'
             thisLineNo = cellfun(@(c) startsWith(c, 'name:'), modelConfig);
             if any(thisLineNo)
-                result = textscan(modelConfig{thisLineNo}, 'name: %s');         
-                flag(idx) = length(result{1});
-                property = setfield(property, 'name', result{1});
+                tmp = textscan(modelConfig{thisLineNo}, 'name: %s');         
+                modelName = tmp{1}{1};
+                property.name = modelName;
             end
-            
+        %\\    
+        case 'constraints'
+            thisLine = cellfun(@(c) startsWith(c, 'constraints:'), modelConfig);
+            thisLineNo = find(thisLine);
+            tmp = textscan(modelConfig{thisLineNo}, 'constraints: %d');
+            numberOfConstraints = tmp{1};
+            property.constraints = modelConfig(thisLineNo+1:thisLineNo+numberOfConstraints);
+        case 'params'    
+            thisLine = cellfun(@(c) startsWith(c, 'parameters:'), modelConfig);
+            thisLineNo = find(thisLine);
+            property.params = sscanf(modelConfig{thisLineNo+2}, '%f');
+        %\\    
         otherwise
             error('MATLAB:searchConfig:unknownProperty', ...
-                  'Property %s is not recognised.', propName);
+                  'Property %s is not recognised.', varargin{idx});
     end
 end
 end
@@ -49,6 +65,6 @@ end
 function property = initProperty(varargin)
 % INITPROPERTY initialise the property files with empty matrix
 fieldValuePair = cell(2*nargin, 1);
-fieldValuePair{1:2:2*nargin} = varargin{:};
+fieldValuePair(1:2:2*nargin) = varargin';
 property = struct(fieldValuePair{:});
 end

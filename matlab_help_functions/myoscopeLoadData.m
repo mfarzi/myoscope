@@ -1,4 +1,4 @@
-function model = loadCompartmentModel(fileName)
+function data = myoscopeLoadData(fileName)
 % LOADCOMPARTMENTMODEL load compartment model 
 %   model = LOADCOMPARTMENTMODEL(filename)
 %   returns a multi-compartment object with given configurations.
@@ -14,8 +14,8 @@ if ~isfile(fileName)
           'File does not exist:\n%s', fileName);
 end
 
-[config, flag] = searchConfig(fileName, 'name');
-model = str2model(config.name{1});
+load(fileName, 's');
+data = s;
 end % of loadCompartmentModel
 
 

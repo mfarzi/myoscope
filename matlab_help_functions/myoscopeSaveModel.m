@@ -1,10 +1,9 @@
-function saveModelConfig(model, path2folder, name)
+function myoscopeSaveModel(model, fileName)
 % saveModelConfig write the model configuration into a simple text file.
 
 % Mohsen Farzi
 % Email: m.farzi@leeds.ac.uk
 
-fileName = fullfile(path2folder, name);
 fileId = fopen(fileName, 'w');
 
 % file header
@@ -22,7 +21,7 @@ fprintf(fileId, 'number of hyperparameters: %d\n', ...
 fprintf(fileId, '\n');
 
 % hyperparameters (name, value) pairs
-fprintf(fileId, 'hyperparameters:\n');
+fprintf(fileId, 'hyperparameters: %d\n', model.getHyperparamsNum());
 nHyperparams = model.getHyperparamsNum();
 if nHyperparams > 0
     hyperparams = model.getHyperparams;
@@ -30,26 +29,30 @@ if nHyperparams > 0
     for idx = 1:nHyperparams
         fprintf(fileId, '%s: %d\n', hyperparamsList{idx}, hyperparams(idx));
     end
-else
-    fprintf(fileId, 'NA');
 end
 fprintf(fileId, '\n');
 
 % constraints
-fprintf(fileId, 'constraints:\n');
-constraintList = model.getConstraint();
+constraintList = model.getConstraints();
+fprintf(fileId, 'constraints: %d\n', length(constraintList));
 for idx = 1:length(constraintList)
     fprintf(fileId, '%s\n', constraintList{idx});
 end
 fprintf(fileId, '\n');
 
 % parameters
-fprintf(fileId, 'parameters:\n');
+fprintf(fileId, 'parameters: %d\n', model.getParamsNum());
 params = model.getParams;
 paramsList = model.getParamsList();
 nParams = model.getParamsNum();
+% print variable names in the first row
 for idx = 1:nParams
-    fprintf(fileId, '%s: %1.6e\n', paramsList{idx}, params(idx));
+    fprintf(fileId, '%s ', paramsList{idx});
 end
-
-end             
+fprintf(fileId, '\n');
+% print parameter values in the second row
+for idx = 1:nParams
+    fprintf(fileId, '%1.6e ', params(idx));
+end
+%\\
+end % of saveModelConfig
