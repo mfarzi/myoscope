@@ -1,4 +1,4 @@
-function [scheme, G_dir] = camino_read_scheme(path2scheme)
+function [scheme, G_dir] = myoscopeReadScheme(path2scheme)
 fileID = fopen(path2scheme,'r');
 keepReading = true;
 

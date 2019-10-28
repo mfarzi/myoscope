@@ -1,4 +1,4 @@
-function camino_write_scheme(thisScheme, path2scheme, varargin)
+function myoscopeWriteScheme(thisScheme, path2scheme, varargin)
 pList = {'scheme', 'ns', 'np', 'nf', 'nd'};
 nParameters = nargin - 2;
 if nParameters > 0 
@@ -19,7 +19,7 @@ if nParameters > 0
                            class(schemeType), pList{1});
                 end
                 
-                if strcmp(schemeType, 'STEJSKALTANNER') || strcmp(schemeType, 'BVECTOR')
+                if ~strcmp(schemeType, 'STEJSKALTANNER') && ~strcmp(schemeType, 'BVECTOR')
                     error(['Unknown scheme type %s. Either "BVECTOR" ',...
                            'or "STEJSKALTANNER" is only supported.\n'],...
                            schemeType);
