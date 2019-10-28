@@ -301,7 +301,7 @@ classdef (Abstract) compartment < handle
             % step 2: extract parameters and replace them with pi
             [params, matches] = strsplit(str, {'+', '=', '>=', '<=', ...
                                                ')', '(', '*', '/', '>', ...
-                                               '<', '^', '-', 'e-'});
+                                               '<', '^', '-', 'e-','e+'});
             for i = 1:length(params)
                 thisParam = params{i};
 
@@ -365,7 +365,7 @@ classdef (Abstract) compartment < handle
 %             end % of switch-case
         end %of addConstraint
         
-        function constraintList = getConstraint(obj)
+        function constraintList = getConstraints(obj)
             constraintList = obj.links.getConstraints();
         end
         
