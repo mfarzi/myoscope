@@ -23,6 +23,7 @@ load(path2data, 'data');
 if isempty(path2roi)
     sig = data;
 else
+    load(path2roi, 'roi');
     idx = roi(roi>0);
     sig = data(:, idx);
 end

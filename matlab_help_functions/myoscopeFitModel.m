@@ -76,7 +76,7 @@ end
 model = myoscopeLoadModel(path2model);
 
 % read diffusion data
-data = myoscopeLoadData(path2data);
+data = myoscopeLoadData(path2data, path2roi);
 
 % read scheme file
 scheme = myoscopeReadScheme(path2scheme);
@@ -93,7 +93,7 @@ params = zeros(model.getParamsNum + 2, nPxl);
 if recordTime
     tic;
 end
-parfor thisPxl = 1:5%nPxl
+parfor thisPxl = 1:nPxl
     p = model.fitMultiRun(scheme, data(:,thisPxl));
     params(:,thisPxl) = p;
     if prettyPrint
