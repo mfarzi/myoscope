@@ -33,16 +33,19 @@ function myoscopeFitModel(path2model, path2data, path2scheme, path2output, varar
 p = inputParser;
 p.CaseSensitive = false;
 p.addParameter('prettyPrint'   , false, ...
-    @(v) assert(islogical(v)&&isscalar(v), 'Value must be logical.'));
+    @(v) assert(islogical(v)&&isscalar(v), 'Value must be a logical scaler.'));
 p.addParameter('fileName'   , 'parameters', ...
     @(v) assert(ischar(v), 'Value must be of type char.'));
 p.addParameter('roi'   , '', ...
     @(v) assert(ischar(v), 'Value must be of type char.'));
+p.addParameter('recordTime', false, ...
+    @(v) assert(islogical(v)&&isscalar(v), 'Value must be a logical scaler.'));
 %\\
 p.parse(varargin{:});              
 prettyPrint = p.Results.prettyPrint;
 fileName = p.Results.fileName;
 path2roi = p.Results.roi;
+recordTime = p.Results.recordTime;
 
 if ~isempty(path2roi) && ~isfile(path2roi)
     error('MATLAB:myoscopeFitModel:fileIsNotFound', ...
@@ -83,10 +86,13 @@ for i = 1:61:305
     scheme.G_dir(i+1:i+60) = [1:10, 1:10, 1:10, 1:10, 1:10, 1:10];
 end
 
+%% fit model to data
 % initialize params matrix
 nPxl = size(data, 2);
 params = zeros(model.getParamsNum + 2, nPxl);
-% fit model to data
+if recordTime
+    tic;
+end
 parfor thisPxl = 1:5%nPxl
     p = model.fitMultiRun(scheme, data(:,thisPxl));
     params(:,thisPxl) = p;
@@ -95,14 +101,32 @@ parfor thisPxl = 1:5%nPxl
                 thisPxl, nPxl, p(1), p(2));
     end
 end
+if recordTime
+    runTime = toc;
+    runTimeStr = duration(0, 0, runTime);
+else
+    runTimeStr = 'NA';
+end
 
-% write output results
+%% write output results
 path2result = fullfile(path2output, strcat(fileName, '.csv'));
 fileId = fopen(path2result, 'w');
+
+% write header lines using # at the begining
+fprintf(fileId, '# name: %s\n', model.name);
+fprintf(fileId, '# run-time: %s\n', runTimeStr);
+fprintf(fileId, '# path2model: %s\n', path2model);
+fprintf(fileId, '# path2data: %s\n', path2data);
+fprintf(fileId, '# path2roi: %s\n', path2roi);
+fprintf(fileId, '# path2scheme: %s\n', path2scheme);
+
+% write parameter names
 varNameList = [{'flag', 'cost'}, model.getParamsList()];
 nParams = length(varNameList);
 formatSpec = [repmat('%s,', 1, nParams-1), '%s\n'];
 fprintf(fileId, formatSpec, varNameList{:});
+
+% write paremeter values
 formatSpec = [repmat('%1.6e,', 1, nParams-1), '%1.6e\n'];
 fprintf(fileId, formatSpec, params);
 fclose(fileId);
