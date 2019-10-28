@@ -160,7 +160,7 @@ classdef (Abstract) compartment < handle
             % p.
             % 
             if nargin == 3
-                nReps = 10;
+                nReps = 50;
             end
 
             % check consistency between data and scheme file
