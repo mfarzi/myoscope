@@ -37,8 +37,11 @@ function [theta, phi, alpha] = getEulerAngles(U)
     end
     
     % check if the input frame is orthogonal
-    if uint8(norm(cross(u1,u2)-u3))~=0
-        error('Columns of the input matrix are not orthogonal.\n');
+    if uint8(norm(cross(u1,u2)-u3))==2
+        u3 = -u3;
+    elseif uint8(norm(cross(u1,u2)-u3)) ~= 0
+        error(['Columns of the input matrix are not orthogonal.\n',...
+               'norm(u1Xu2-u3)=%f\n'], norm(cross(u1, u2)-u3));
     end
     
     % esitmate theta, phi, alpha
