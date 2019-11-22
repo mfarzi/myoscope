@@ -82,7 +82,11 @@ function modelTree = generateTree(str)
             otherwise
                 lastNode = modelTree.nnodes;
                 name = modelTree.get(lastNode);
-                name = strcat(name, str(i));
+                if strcmp(name, 'C')
+                    name = str(i);
+                else
+                    name = strcat(name, str(i));
+                end
                 modelTree = modelTree.set(lastNode, name);
         end
     end
