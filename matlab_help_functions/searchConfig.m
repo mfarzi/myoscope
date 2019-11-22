@@ -54,6 +54,12 @@ for idx = 1:nProps
             thisLine = cellfun(@(c) startsWith(c, 'parameters:'), modelConfig);
             thisLineNo = find(thisLine);
             property.params = sscanf(modelConfig{thisLineNo+2}, '%f');
+        case 'hyperparams'
+            thisLine = cellfun(@(c) startsWith(c, 'hyperparameters:'), modelConfig);
+            thisLineNo = find(thisLine);
+            tmp = textscan(modelConfig{thisLineNo}, 'hyperparameters: %d');
+            numberOfHyperparams = tmp{1};
+            property.hyperparams = modelConfig(thisLineNo+1:thisLineNo+numberOfHyperparams);
         %\\    
         otherwise
             error('MATLAB:searchConfig:unknownProperty', ...
