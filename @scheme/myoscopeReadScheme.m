@@ -1,4 +1,4 @@
-function [scheme, G_dir] = myoscopeReadScheme(path2scheme)
+function [scheme, gVec] = myoscopeReadScheme(path2scheme)
 fileID = fopen(path2scheme,'r');
 keepReading = true;
 
@@ -24,23 +24,28 @@ if strcmp(schemeType, 'STEJSKALTANNER')
     % add the direction
     N = size(scheme, 1);
     scheme.G_dir = zeros(N, 1);
-    G_dir = [];
+    gVec = [];
     nDir = 0;
     for n = 1:N
-        this_dir = [scheme.x(n); scheme.y(n); scheme.z(n)];
-        if sum(this_dir)==0
+        thisVec = [scheme.x(n); scheme.y(n); scheme.z(n)];
+        if sum(thisVec)==0
             continue;
         end
         
-        if isempty(G_dir)
-            G_dir = [G_dir; this_dir'];
+        thisVec = thisVec/norm(thisVec);
+        if isempty(gVec)
+            gVec = [gVec; thisVec'];
             nDir = 1;
             scheme.G_dir(n) = 1;
         else
-            dis = sum((G_dir - repmat(this_dir', nDir, 1)).^2, 2);
-            k = find(dis<eps);
-            if isempty(k)
-                G_dir = [G_dir; this_dir'];
+            angleDiff = acos(gVec*thisVec)*180/pi;
+            % The gradient directions could be flipped; -g and g are the 
+            % same.
+            idx = angleDiff>90;
+            angleDiff(idx) = 180 - angleDiff(idx);
+            [minAngleDiff, k] = min(angleDiff);
+            if minAngleDiff>10
+                gVec = [gVec; thisVec'];
                 nDir = nDir + 1;
                 scheme.G_dir(n) = nDir;
             else
