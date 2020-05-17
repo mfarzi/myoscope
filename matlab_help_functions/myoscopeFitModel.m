@@ -80,11 +80,6 @@ data = myoscopeLoadData(path2data, path2roi);
 
 % read scheme file
 scheme = myoscopeReadScheme(path2scheme);
-% ad hoc solution for gradient directions
-for i = 1:61:305
-    scheme.G_dir(i) = 0;
-    scheme.G_dir(i+1:i+60) = [1:10, 1:10, 1:10, 1:10, 1:10, 1:10];
-end
 
 %% fit model to data
 % initialize params matrix
@@ -93,14 +88,18 @@ params = zeros(model.getParamsNum + 2, nPxl);
 if recordTime
     tic;
 end
-parfor thisPxl = 1:nPxl
-    p = model.fitMultiRun(scheme, data(:,thisPxl));
+hbar = parfor_progressbar(nPxl, 'Optimisation is running ...');
+parfor(thisPxl = 1:nPxl, 18)
+    p = model.fitMultiRun(scheme, data(:,thisPxl), 5);
     params(:,thisPxl) = p;
-    if prettyPrint
+    if prettyPrint 
         fprintf('pixel %d/%d: exit flag = %d, and cost function = %d \n',...
                 thisPxl, nPxl, p(1), p(2));
     end
+    hbar.iterate(1); % update progress by one iteration
 end
+close(hbar); % close the progress bar
+
 if recordTime
     runTime = toc;
     runTimeStr = duration(0, 0, runTime);

@@ -16,9 +16,16 @@ function fileName = fit_tensor_tensor_01(paramsFolder, ...
 thisName = strrep(dataName, 'data', 'params');
 thisName = strcat(thisName, '.mat');
 
-modelName = 'tensor-tensor-01';
-tmpModel = str2model(modelName);
-
+modelName = '[tensor-tensor]';
+model = loadCompartmentModel('/Users/medmfarb/Documents/mycodes/tmp/testSaveConfig.txt');
+% model = str2model(modelName);
+% model.addConstraint('s0 = 1');
+% model.addConstraint('comp2.diffPar >= 2.0e-9');
+% model.addConstraint('comp2.diffPar >= comp1.diffPar');
+% model.addConstraint('comp2.phi = comp1.phi');
+% model.addConstraint('comp2.theta = comp1.theta');
+% model.addConstraint('comp2.alpha = comp1.alpha');
+    
 thisFolder = fullfile(paramsFolder, modelName);
 if ~isfolder(thisFolder)
     mkdir(thisFolder);
@@ -39,31 +46,19 @@ else
 end
 
 %% load data
-load(path2voxelData, 's', 'scheme', 'mask');
+load(path2voxelData, 's', 'scheme');
 nPxlTot = size(s, 2);
-nParams = tmpModel.getParamsNum() + 2;         % exist flag + cost function 
+nParams = model.getParamsNum() + 2;         % exist flag + cost function 
 nMultiRun = 30;
 
 %% fit model
 params = zeros(nPxlTot, nParams);
-hbar = parfor_progressbar(nPxlTot, 'Optimisation is running ...');
+%hbar = parfor_progressbar(nPxlTot, 'Optimisation is running ...');
 scheme = scheme; % make it accessible on the workers when using parfor
 tic;
-parfor thisPxl = 1:nPxlTot
+for thisPxl = 1:nPxlTot
 %for thisPxl = 148
     data = s(:,thisPxl);
-
-    cmp1 = tensor();
-    cmp2 = tensor();
-    
-    model = twoCompartmentModel(cmp1, cmp2);
-    model.addConstraint('s0 = 1');
-    model.addConstraint('comp2_diffPar >= 2.0e-9');
-    model.addConstraint('comp2_diffPar >= comp1_diffPar');
-    model.addConstraint('comp2_phi = comp1_phi');
-    model.addConstraint('comp2_theta = comp1_theta');
-    model.addConstraint('comp2_alpha = comp1_alpha');
-    
     
 %     model.randomInit();
 %     p = model.fit(scheme, data);
@@ -76,10 +71,10 @@ parfor thisPxl = 1:nPxlTot
                    'and muscle fraction %1.2f.\n'), thisPxl, p(2), ...
                    p(1), p(4)*100);
                
-    hbar.iterate(1); % update progress by one iteration
+    %hbar.iterate(1); % update progress by one iteration
 end
-close(hbar); % close the progress bar
+%close(hbar); % close the progress bar
 runTime = toc;
 
 % save results
-save(fileName, 'params', 'mask', 'runTime', 'modelName');
+save(fileName, 'params', 'runTime', 'modelName');

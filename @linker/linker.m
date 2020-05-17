@@ -390,7 +390,8 @@ classdef linker < handle
         
         function constraintList = getConstraints(obj)
             %
-            constraintList = {};
+             linkTypes = arrayfun(@(c) c.type, obj, 'UniformOutput', false);
+             constraintList{1,1} = ['link type: ', strjoin(linkTypes, ',')];
             for idx = 1:length(obj)
                 if ~isinf(obj(idx).upperBound) && ~obj(idx).constant && ~obj(idx).dummy
                     constraintList = [constraintList; sprintf('%s<=%1.2e', ...
