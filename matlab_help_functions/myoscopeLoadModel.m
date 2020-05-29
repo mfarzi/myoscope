@@ -48,10 +48,15 @@ for i=1:nConstraints
 end
 
 % set hyperparameters
-%nHyperparams = length(config.hyperparams);
-%for i = 1:nHyperparams
-%    model.set(config.hyperparams{i});
-%end
+nHyperparams = length(config.hyperparams);
+hparams = zeros(nHyperparams, 1);
+for i = 1:nHyperparams
+    tmp = textscan(config.hyperparams{i},'%s %f');
+    hparams(i) = tmp{2};
+end
+if ~isempty(hparams)
+    model.set('hyperparams', hparams);
+end
 
 % set parameters values
 model.set('params', config.params);
