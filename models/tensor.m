@@ -420,6 +420,9 @@ classdef tensor < compartment
             obj.modelParams = p;
         end    
         
+        function updateHyperparams(obj, p)
+            % do nothing
+        end
     end % of methods (protected)
     
     methods (Static)

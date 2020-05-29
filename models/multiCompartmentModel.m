@@ -151,9 +151,10 @@ classdef multiCompartmentModel < compartment
                 p = inputParser;
                 p.CaseSensitive = false;
             
-                p.addParameter('s0'        , obj.s0         , @obj.validationFCN_s0); 
-                p.addParameter('fitter'    , obj.fitter     , @obj.validationFCN_fitter);
-                p.addParameter('params'    , obj.modelParams, @obj.validationFCN_modelParams); 
+                p.addParameter('s0'         , obj.s0         , @obj.validationFCN_s0); 
+                p.addParameter('fitter'     , obj.fitter     , @obj.validationFCN_fitter);
+                p.addParameter('params'     , obj.modelParams, @obj.validationFCN_modelParams); 
+                p.addParameter('hyperparams', obj.hyperparams, @obj.validationFCN_hyperparams); 
                 
                 p.parse(varargin{:});
 
@@ -167,6 +168,12 @@ classdef multiCompartmentModel < compartment
                     params = params';
                 end
                 obj.updateParams(params);
+                
+                hparams = p.Results.hyperparams;
+                if isrow(hparams)
+                    hparams = hparams';
+                end
+                obj.updateHyperparams(hparams);
             end % if (nargin == 1)
         end % of set
         
@@ -281,12 +288,12 @@ classdef multiCompartmentModel < compartment
         function updateHyperparams(obj, p)
             idxStart = 0;
             for i = 1:obj.nCompartments
-                n = obj.comp{i}.getParamsNum('hyperparams');
+                n = obj.comp{i}.getHyperparamsNum;
                 if n > 0
                     idxEnd   = idxStart + n;
                     idxStart = idxStart + 1;
              
-                    obj.comp{i}.updateParams(p(idxStart:idxEnd));
+                    obj.comp{i}.updateHyperparams(p(idxStart:idxEnd));
                     idxStart = idxEnd;
                 end
             end
@@ -344,6 +351,18 @@ classdef multiCompartmentModel < compartment
                 error('MATLAB:mulitCompartmentModel:set', ...
                      ['Value for "params" must be a double column or ',...
                       'row vector of size %d.\n'], obj.nParams);
+            end
+        end
+        
+        function validationFCN_hyperparams(obj, v)
+            nHyperparams = obj.getHyperparamsNum;
+            isVector = iscolumn(v) || isrow(v);
+            isCorrectSize = numel(v) == nHyperparams;
+ 
+            if ~isVector || ~isCorrectSize || ~isnumeric(v)
+                error('MATLAB:mulitCompartmentModel:set', ...
+                     ['Value for "params" must be a double column or ',...
+                      'row vector of size %d.\n'], nHyperparams);
             end
         end
         %\\

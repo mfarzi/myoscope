@@ -109,6 +109,7 @@ classdef (Abstract) compartment < handle
         s   = synthesize(obj, scheme);
         jac = jacobian(obj, scheme);
         updateParams(obj, p);
+        updateHyperparams(obj, p);
     end
     
     methods (Abstract)

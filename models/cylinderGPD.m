@@ -379,6 +379,10 @@ classdef cylinderGPD < compartment
                                     % and the x-axis 
             obj.modelParams = p;
         end    
+        
+        function updateHyperparams(obj, p)
+            % do nothing
+        end
     end % of methods (protected)
     
     methods (Static)
