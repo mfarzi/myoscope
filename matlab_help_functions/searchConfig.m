@@ -61,6 +61,11 @@ for idx = 1:nProps
             thisLineNo = find(thisLine);
             property.paramsName = strsplit(modelConfig{thisLineNo+1}, ' ');
             
+        case 'freeParamsNum'    
+            thisLine = cellfun(@(c) startsWith(c, 'number of free parameters:'), modelConfig);
+            thisLineNo = find(thisLine);
+            property.freeParamsNum = sscanf(modelConfig{thisLineNo}, 'number of free parameters:%f');
+            
         case 'hyperparams'
             thisLine = cellfun(@(c) startsWith(c, 'hyperparameters:'), modelConfig);
             thisLineNo = find(thisLine);
