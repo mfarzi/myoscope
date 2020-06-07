@@ -315,6 +315,10 @@ classdef zeppelin < compartment
             end
         end % of updateParams
         
+        function updateHyperparams(obj, p)
+            % do nothing
+        end
+        
     end % of methods (protected)
     
     methods (Static)
