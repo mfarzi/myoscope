@@ -159,11 +159,16 @@ classdef multiCompartmentModel < compartment
                 p.parse(varargin{:});
 
                 obj.fitter = p.Results.fitter;
-                obj.s0 = p.Results.s0;
-                
-                obj.modelParams(1) = obj.s0;
                 
                 params = p.Results.params;
+                if ismember('params', p.UsingDefaults)
+                    % input params is not set in the function call
+                    params(1) = p.Results.s0;
+                elseif not(ismember('s0', p.UsingDefaults))
+                    warning('MATLAB:MYOSCOPE:MULTICOMPARTMENTMODEL',...
+                            strcat("The input for s0 is ignored",...
+                             " since you already set the 'params'"));
+                end
                 if isrow(params)
                     params = params';
                 end
