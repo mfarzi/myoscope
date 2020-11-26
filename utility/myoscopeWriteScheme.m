@@ -3,10 +3,11 @@ function myoscopeWriteScheme(thisScheme, path2scheme, varargin)
 
 if isempty(schemeType)
     % try automatic selection
-    if size(thisScheme, 2)==7
+    variableList = {'x', 'y', 'z', 'G_mag', 'DELTA', 'delta', 'TE'};
+    isStejskalTanner = all(ismember(variableList,...
+                                    thisScheme.Properties.VariableNames));
+    if isStejskalTanner
         schemeType = 'STEJSKALTANNER';
-    elseif size(thisScheme, 2)==3
-        schemeType = 'BVECTOR';
     else
         error(['The type of the scheme file cannot be automatically ',...
                'identified.\n']);
@@ -27,7 +28,9 @@ if strcmp(schemeType, 'STEJSKALTANNER')
     nScheme = size(thisScheme, 1);
 
     for i=1:nScheme
-        A = thisScheme{i,1:7};
+        A = [thisScheme.x(i), thisScheme.y(i), thisScheme.z(i),...
+             thisScheme.G_mag(i), thisScheme.DELTA(i), ...
+             thisScheme.delta(i), thisScheme.TE(i)];
         for j=1:7
             if j<7 && A(j)<0
                 fprintf(fileID, '%1.5f  ',A(j));

@@ -53,7 +53,14 @@ if strcmp(schemeType, 'STEJSKALTANNER')
             end
         end
     end 
-        
+    
+    % add b-value
+    GAMMA = 2.6751525e8; % rad s-1 T-1
+    bval = (scheme.DELTA-scheme.delta/3).*((scheme.delta .*scheme.G_mag)*GAMMA).^2*1e-6;
+    scheme.bval = bval;
+    
+    % consider repetitions
+    scheme.rep = ones(size(scheme,1),1);
 else
     scheme = [];
 end
