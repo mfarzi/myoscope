@@ -498,6 +498,7 @@ function addConstraint(obj, str)
         obj(link3No).crossLinkNo = [link1No, link2No];
         obj(link3No).fval = @(thisP, ii) C-thisP(ii(1))-thisP(ii(2));
         obj(link3No).gval = @(thisJac, thisP, ii) -thisJac(ii(1),:)-thisJac(ii(2),:);
+        obj(link3No).symbolicFun = @(str) strcat(str{1},'+',str{2},'+',str{3},'=',num2str(C));
         obj.sortCompOrder();
         return;
     end

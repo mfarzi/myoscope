@@ -66,7 +66,7 @@ classdef ellipticalCylinder < compartment
         name  = 'ellipticalCylinder'       % class name
         s0    = 1;                  % b0-signal with no diffusion weight
         
-        diff  = 1e-9;               % diffusivity along the cylinder axis
+        diffPar  = 1e-9;            % diffusivity along the cylinder axis
                                     % [m^2/s]
                                        
         r1    = 10e-6;              % Radius of ellipsoid along the major
@@ -96,9 +96,9 @@ classdef ellipticalCylinder < compartment
     
     
     properties (Access=protected)
-        nParams = 7;           % number of model parameters
+        nParams = 7;                % number of model parameters
         modelParams  = [];          % model parameters 
-                                    % [s0; diff; r1; r2; theta; phi; alpha]   
+                                    % [s0; diffPar; r1; r2; theta; phi; alpha]   
         hyperparams = [];                            
     end
     
@@ -109,14 +109,14 @@ classdef ellipticalCylinder < compartment
             %   sets of parameters.
             %
             %   ellipticalCylinder(params) construct an object with 
-            %   given initial params; [diff; r1; r2; theta; phi; alpha]
+            %   given initial params; [diffPar; r1; r2; theta; phi; alpha]
             %
             %   ellipticalCylinder(..., <Parameter>, <Value>, ...) allow
             %   passing model parameters as parameter-value pairs. If
             %   params is provided as first argument, the param-value pairs
             %   will be ignored.
             % 
-            obj.modelParams = [obj.s0; obj.diff; obj.r1; obj.r2; ...
+            obj.modelParams = [obj.s0; obj.diffPar; obj.r1; obj.r2; ...
                                obj.theta; obj.phi; obj.alpha];               
             
             % define linkers for the zeppelin class
@@ -164,7 +164,7 @@ classdef ellipticalCylinder < compartment
                 p.CaseSensitive = false;
                 p.addParameter('params'        , obj.modelParams   , @obj.validationFCN_params);
                 p.addParameter('s0'            , obj.s0            , @obj.validationFCN_s0);                        
-                p.addParameter('diff'          , obj.diff          , @obj.validationFCN_diff);
+                p.addParameter('diffPar'       , obj.diffPar       , @obj.validationFCN_diffPar);
                 p.addParameter('r1'            , obj.r1            , @obj.validationFCN_r1);
                 p.addParameter('r2'            , obj.r2            , @obj.validationFCN_r2);
                 p.addParameter('theta'         , obj.theta         , @obj.validationFCN_theta);
@@ -181,7 +181,7 @@ classdef ellipticalCylinder < compartment
                 
                 if paramsIsProvided
                     obj.s0        = p.Results.params(1);
-                    obj.diff      = p.Results.params(2);
+                    obj.diffPar   = p.Results.params(2);
                     obj.r1        = p.Results.params(3);
                     obj.r2        = p.Results.params(4);
                     obj.theta     = p.Results.params(5);
@@ -189,7 +189,7 @@ classdef ellipticalCylinder < compartment
                     obj.alpha     = p.Results.params(7);
                     
                     % warning if parameters are overwritten
-                    paramList = {'s0', 'diff', 'r1', 'r2', ...
+                    paramList = {'s0', 'diffPar', 'r1', 'r2', ...
                                  'theta', 'phi', 'alpha'};
                     id = find(~(ismember(paramList, p.UsingDefaults)));
                     if length(id) == 1
@@ -212,7 +212,7 @@ classdef ellipticalCylinder < compartment
                 %\\    
                 else % use param-value pairs to set the parameters
                     obj.s0        = p.Results.s0;
-                    obj.diff      = p.Results.diff;
+                    obj.diffPar   = p.Results.diffPar;
                     obj.r1        = p.Results.r1;
                     obj.r2        = p.Results.r2;
                     obj.theta     = p.Results.theta;
@@ -220,7 +220,7 @@ classdef ellipticalCylinder < compartment
                     obj.alpha     = p.Results.alpha;
                 end
         
-                obj.modelParams = [obj.s0; obj.diff; obj.r1; obj.r2; ...
+                obj.modelParams = [obj.s0; obj.diffPar; obj.r1; obj.r2; ...
                                    obj.theta; obj.phi; obj.alpha];             
             end % of if nargin==0
         end % of set
@@ -251,6 +251,8 @@ classdef ellipticalCylinder < compartment
                r = obj.r1;
                obj.r1 = obj.r2;
                obj.r2 = r;
+               warning('MATLAB:ellipticalCylinder:rotateAxis', ...
+                       ' Constraint on r1 and r2 is not set properly.');
            end
 
            [obj.theta, obj.phi, obj.alpha] = getEulerAngles(V);
@@ -267,7 +269,7 @@ classdef ellipticalCylinder < compartment
            % make sure alpha is in rage [0, pi]
            obj.alpha = mod(obj.alpha, pi);
            
-           obj.modelParams(2:end) = [obj.diff; obj.r1;...
+           obj.modelParams(2:end) = [obj.diffPar; obj.r1;...
                                      obj.r2; obj.theta; ...
                                      obj.phi; obj.alpha];
         end % of rotateAxis
@@ -311,31 +313,31 @@ classdef ellipticalCylinder < compartment
             Gperp2_mag2 = (G*n3).^2;
             
             % compute bPar
-            bPar = (scheme.DELTA-scheme.delta/3).*(obj.GAMMA*scheme.delta).^2*obj.diff;
+            bPar = (scheme.DELTA-scheme.delta/3).*(obj.GAMMA*scheme.delta).^2*obj.diffPar;
             
             % compute bPerp1
             beta = obj.Jp1ROOTS/obj.r1;          
-            DB2 = obj.diff*beta.^2;
+            DB2 = obj.diffPar*beta.^2;
             nom = 2*scheme.delta*DB2' - 2  ...
                 + 2*exp(-scheme.delta*DB2') ...
                 + 2*exp(-scheme.DELTA*DB2') ...
                 - exp(-(scheme.DELTA-scheme.delta)*DB2') ...
                 - exp(-(scheme.DELTA+scheme.delta)*DB2');
 
-            denom = obj.diff^2*beta.^6.*(obj.Jp1ROOTS.^2-1);
+            denom = obj.diffPar^2*beta.^6.*(obj.Jp1ROOTS.^2-1);
             
             bPerp1 = 2*obj.GAMMA^2*nom*(1./denom);
             
             % compute bPerp2
             beta = obj.Jp1ROOTS/obj.r2;          
-            DB2 = obj.diff*beta.^2;
+            DB2 = obj.diffPar*beta.^2;
             nom = 2*scheme.delta*DB2' - 2  ...
                 + 2*exp(-scheme.delta*DB2') ...
                 + 2*exp(-scheme.DELTA*DB2') ...
                 - exp(-(scheme.DELTA-scheme.delta)*DB2') ...
                 - exp(-(scheme.DELTA+scheme.delta)*DB2');
 
-            denom = obj.diff^2*beta.^6.*(obj.Jp1ROOTS.^2-1);
+            denom = obj.diffPar^2*beta.^6.*(obj.Jp1ROOTS.^2-1);
             
             bPerp2 = 2*obj.GAMMA^2*nom*(1./denom);
             
@@ -372,19 +374,19 @@ classdef ellipticalCylinder < compartment
             Gperp2_mag2 = (G*n3).^2;
             
             % compute bPar
-            bPar = (scheme.DELTA-scheme.delta/3).*(obj.GAMMA*scheme.delta).^2*obj.diff;
+            bPar = (scheme.DELTA-scheme.delta/3).*(obj.GAMMA*scheme.delta).^2*obj.diffPar;
             
             % compute bPerp1
             beta_r1 = obj.Jp1ROOTS/obj.r1;          
             B2_r1 = beta_r1.^2;
             
-            nom1 = 2*obj.diff*scheme.delta*B2_r1' - 2   ...
-                 + 2*exp(-obj.diff*scheme.delta*B2_r1') ...
-                 + 2*exp(-obj.diff*scheme.DELTA*B2_r1') ...
-                 - exp(-obj.diff*(scheme.DELTA-scheme.delta)*B2_r1') ...
-                 - exp(-obj.diff*(scheme.DELTA+scheme.delta)*B2_r1');
+            nom1 = 2*obj.diffPar*scheme.delta*B2_r1' - 2   ...
+                 + 2*exp(-obj.diffPar*scheme.delta*B2_r1') ...
+                 + 2*exp(-obj.diffPar*scheme.DELTA*B2_r1') ...
+                 - exp(-obj.diffPar*(scheme.DELTA-scheme.delta)*B2_r1') ...
+                 - exp(-obj.diffPar*(scheme.DELTA+scheme.delta)*B2_r1');
 
-            denom1 = obj.diff^2*beta_r1.^6.*(obj.Jp1ROOTS.^2-1);
+            denom1 = obj.diffPar^2*beta_r1.^6.*(obj.Jp1ROOTS.^2-1);
             
             bPerp1 = 2*obj.GAMMA^2*nom1*(1./denom1);
 
@@ -392,13 +394,13 @@ classdef ellipticalCylinder < compartment
             beta_r2 = obj.Jp1ROOTS/obj.r2;          
             B2_r2 = beta_r2.^2;
 
-            nom2 = 2*obj.diff*scheme.delta*B2_r2' - 2  ...
-                 + 2*exp(-obj.diff*scheme.delta*B2_r2') ...
-                 + 2*exp(-obj.diff*scheme.DELTA*B2_r2') ...
-                 -   exp(-obj.diff*(scheme.DELTA-scheme.delta)*B2_r2') ...
-                 -   exp(-obj.diff*(scheme.DELTA+scheme.delta)*B2_r2');
+            nom2 = 2*obj.diffPar*scheme.delta*B2_r2' - 2  ...
+                 + 2*exp(-obj.diffPar*scheme.delta*B2_r2') ...
+                 + 2*exp(-obj.diffPar*scheme.DELTA*B2_r2') ...
+                 -   exp(-obj.diffPar*(scheme.DELTA-scheme.delta)*B2_r2') ...
+                 -   exp(-obj.diffPar*(scheme.DELTA+scheme.delta)*B2_r2');
 
-            denom2 = obj.diff^2*beta_r2.^6.*(obj.Jp1ROOTS.^2-1);
+            denom2 = obj.diffPar^2*beta_r2.^6.*(obj.Jp1ROOTS.^2-1);
             
             bPerp2 = 2*obj.GAMMA^2*nom2*(1./denom2);
             
@@ -414,41 +416,41 @@ classdef ellipticalCylinder < compartment
             jac(:,1) = f0/obj.s0;
             
             %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            %%%%%%%%%%       Gradient wrt to diff-jac(:,2)      %%%%%%%%%%%
+            %%%%%%%%%%       Gradient wrt to diffPar-jac(:,2)      %%%%%%%%%%%
             %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             
-            % gbPar_gDiff
-            gbPar_gDiff = bPar/obj.diff;
+            % gbPar_gDiffPar
+            gbPar_gDiffPar = bPar/obj.diffPar;
             
-            % gbPerp1_gDiff
-            gNom1_gDiff = 2*scheme.delta*B2_r1' ...
-                        - 2*exp(-obj.diff*scheme.delta*B2_r1').*(scheme.delta*B2_r1') ...
-                        - 2*exp(-obj.diff*scheme.DELTA*B2_r1').*(scheme.DELTA*B2_r1') ...
-                        +   exp(-obj.diff*(scheme.DELTA-scheme.delta)*B2_r1').*((scheme.DELTA-scheme.delta)*B2_r1')...
-                        +   exp(-obj.diff*(scheme.DELTA+scheme.delta)*B2_r1').*((scheme.DELTA+scheme.delta)*B2_r1');
+            % gbPerp1_gDiffPar
+            gNom1_gDiffPar = 2*scheme.delta*B2_r1' ...
+                        - 2*exp(-obj.diffPar*scheme.delta*B2_r1').*(scheme.delta*B2_r1') ...
+                        - 2*exp(-obj.diffPar*scheme.DELTA*B2_r1').*(scheme.DELTA*B2_r1') ...
+                        +   exp(-obj.diffPar*(scheme.DELTA-scheme.delta)*B2_r1').*((scheme.DELTA-scheme.delta)*B2_r1')...
+                        +   exp(-obj.diffPar*(scheme.DELTA+scheme.delta)*B2_r1').*((scheme.DELTA+scheme.delta)*B2_r1');
             
-            gDenom1_gDiff = 2*obj.diff*beta_r1.^6.*(obj.Jp1ROOTS.^2-1);
-            tmp = bsxfun(@times, gNom1_gDiff, denom1') - bsxfun(@times, nom1, gDenom1_gDiff');
+            gDenom1_gDiffPar = 2*obj.diffPar*beta_r1.^6.*(obj.Jp1ROOTS.^2-1);
+            tmp = bsxfun(@times, gNom1_gDiffPar, denom1') - bsxfun(@times, nom1, gDenom1_gDiffPar');
             tmp = bsxfun(@rdivide, tmp, denom1'.^2);
-            gbPerp1_gDiff = sum(tmp, 2)*2*obj.GAMMA^2;
+            gbPerp1_gDiffPar = sum(tmp, 2)*2*obj.GAMMA^2;
      
-            % gbPerp2_gDiff
-            gNom2_gDiff = 2*scheme.delta*B2_r2' ...
-                        - 2*exp(-obj.diff*scheme.delta*B2_r2').*(scheme.delta*B2_r2') ...
-                        - 2*exp(-obj.diff*scheme.DELTA*B2_r2').*(scheme.DELTA*B2_r2') ...
-                        +   exp(-obj.diff*(scheme.DELTA-scheme.delta)*B2_r2').*((scheme.DELTA-scheme.delta)*B2_r2')...
-                        +   exp(-obj.diff*(scheme.DELTA+scheme.delta)*B2_r2').*((scheme.DELTA+scheme.delta)*B2_r2');
+            % gbPerp2_gDiffPar
+            gNom2_gDiffPar = 2*scheme.delta*B2_r2' ...
+                        - 2*exp(-obj.diffPar*scheme.delta*B2_r2').*(scheme.delta*B2_r2') ...
+                        - 2*exp(-obj.diffPar*scheme.DELTA*B2_r2').*(scheme.DELTA*B2_r2') ...
+                        +   exp(-obj.diffPar*(scheme.DELTA-scheme.delta)*B2_r2').*((scheme.DELTA-scheme.delta)*B2_r2')...
+                        +   exp(-obj.diffPar*(scheme.DELTA+scheme.delta)*B2_r2').*((scheme.DELTA+scheme.delta)*B2_r2');
             
-            gDenom2_gDiff = 2*obj.diff*beta_r2.^6.*(obj.Jp1ROOTS.^2-1);
-            tmp = bsxfun(@times, gNom2_gDiff, denom2') - bsxfun(@times, nom2, gDenom2_gDiff');
+            gDenom2_gDiffPar = 2*obj.diffPar*beta_r2.^6.*(obj.Jp1ROOTS.^2-1);
+            tmp = bsxfun(@times, gNom2_gDiffPar, denom2') - bsxfun(@times, nom2, gDenom2_gDiffPar');
             tmp = bsxfun(@rdivide, tmp, denom2'.^2);
-            gbPerp2_gDiff = sum(tmp, 2)*2*obj.GAMMA^2;
+            gbPerp2_gDiffPar = sum(tmp, 2)*2*obj.GAMMA^2;
             
-            % gradient wrt diff       
-            gf_gDiff = -(gbPar_gDiff.*Gpar_mag2     + ...
-                         gbPerp1_gDiff.*Gperp1_mag2 + ...
-                         gbPerp2_gDiff.*Gperp2_mag2).*f0;
-            jac(:,2) = gf_gDiff;
+            % gradient wrt diffPar       
+            gf_gDiffPar = -(gbPar_gDiffPar.*Gpar_mag2     + ...
+                         gbPerp1_gDiffPar.*Gperp1_mag2 + ...
+                         gbPerp2_gDiffPar.*Gperp2_mag2).*f0;
+            jac(:,2) = gf_gDiffPar;
             
             %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             %%%%%%%%%%       Gradient wrt to r1-jac(:,3)        %%%%%%%%%%%
@@ -456,13 +458,13 @@ classdef ellipticalCylinder < compartment
             % gbPar_gR1 = 0;
             
             % gbPerp1_gR1
-            gNom1_gBm = 4*obj.diff*scheme.delta*beta_r1' ...
-                      - 2*exp(-obj.diff*scheme.delta*B2_r1').*(2*obj.diff*scheme.delta*beta_r1') ...
-                      - 2*exp(-obj.diff*scheme.DELTA*B2_r1').*(2*obj.diff*scheme.DELTA*beta_r1') ...
-                      +   exp(-obj.diff*(scheme.DELTA-scheme.delta)*B2_r1').*(2*obj.diff*(scheme.DELTA-scheme.delta)*beta_r1') ...
-                      +   exp(-obj.diff*(scheme.DELTA+scheme.delta)*B2_r1').*(2*obj.diff*(scheme.DELTA+scheme.delta)*beta_r1');
+            gNom1_gBm = 4*obj.diffPar*scheme.delta*beta_r1' ...
+                      - 2*exp(-obj.diffPar*scheme.delta*B2_r1').*(2*obj.diffPar*scheme.delta*beta_r1') ...
+                      - 2*exp(-obj.diffPar*scheme.DELTA*B2_r1').*(2*obj.diffPar*scheme.DELTA*beta_r1') ...
+                      +   exp(-obj.diffPar*(scheme.DELTA-scheme.delta)*B2_r1').*(2*obj.diffPar*(scheme.DELTA-scheme.delta)*beta_r1') ...
+                      +   exp(-obj.diffPar*(scheme.DELTA+scheme.delta)*B2_r1').*(2*obj.diffPar*(scheme.DELTA+scheme.delta)*beta_r1');
             
-            gDenom1_gBm = 6*obj.diff^2*beta_r1.^5.*(obj.Jp1ROOTS.^2-1);
+            gDenom1_gBm = 6*obj.diffPar^2*beta_r1.^5.*(obj.Jp1ROOTS.^2-1);
             
             tmp = bsxfun(@times, gNom1_gBm, denom1') - bsxfun(@times, nom1, gDenom1_gBm');
             gbPerp1_gBm = 2*obj.GAMMA^2*bsxfun(@rdivide, tmp, denom1'.^2);
@@ -480,13 +482,13 @@ classdef ellipticalCylinder < compartment
             %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             
             % gbPerp2_gR
-            gNom2_gBm = 4*obj.diff*scheme.delta*beta_r2' ...
-                      - 2*exp(-obj.diff*scheme.delta*B2_r2').*(2*obj.diff*scheme.delta*beta_r2') ...
-                      - 2*exp(-obj.diff*scheme.DELTA*B2_r2').*(2*obj.diff*scheme.DELTA*beta_r2') ...
-                      +   exp(-obj.diff*(scheme.DELTA-scheme.delta)*B2_r2').*(2*obj.diff*(scheme.DELTA-scheme.delta)*beta_r2') ...
-                      +   exp(-obj.diff*(scheme.DELTA+scheme.delta)*B2_r2').*(2*obj.diff*(scheme.DELTA+scheme.delta)*beta_r2');
+            gNom2_gBm = 4*obj.diffPar*scheme.delta*beta_r2' ...
+                      - 2*exp(-obj.diffPar*scheme.delta*B2_r2').*(2*obj.diffPar*scheme.delta*beta_r2') ...
+                      - 2*exp(-obj.diffPar*scheme.DELTA*B2_r2').*(2*obj.diffPar*scheme.DELTA*beta_r2') ...
+                      +   exp(-obj.diffPar*(scheme.DELTA-scheme.delta)*B2_r2').*(2*obj.diffPar*(scheme.DELTA-scheme.delta)*beta_r2') ...
+                      +   exp(-obj.diffPar*(scheme.DELTA+scheme.delta)*B2_r2').*(2*obj.diffPar*(scheme.DELTA+scheme.delta)*beta_r2');
             
-            gDenom2_gBm = 6*obj.diff^2*beta_r2.^5.*(obj.Jp1ROOTS.^2-1);
+            gDenom2_gBm = 6*obj.diffPar^2*beta_r2.^5.*(obj.Jp1ROOTS.^2-1);
             
             tmp = bsxfun(@times, gNom2_gBm, denom2') - bsxfun(@times, nom2, gDenom2_gBm');
             gbPerp2_gBm = 2*obj.GAMMA^2*bsxfun(@rdivide, tmp, denom2'.^2);
@@ -553,7 +555,7 @@ classdef ellipticalCylinder < compartment
         
         function updateParams(obj, p)
             obj.s0 = p(1);
-            obj.diff = p(2);  % diffusivity along the cylinder axis [s/m^2]
+            obj.diffPar = p(2);  % diffusivity along the cylinder axis [s/m^2]
             obj.r1 = p(3);    % Radius of the cylinder [m]
             obj.r2 = p(4);    % Radius of the cyliner [m]
             obj.theta = p(5); % the angle between cylinder axis n and the z-axis
@@ -562,11 +564,15 @@ classdef ellipticalCylinder < compartment
             obj.alpha = p(7);
             obj.modelParams = p;
         end    
+        
+        function updateHyperparams(obj, p)
+            % do nothing
+        end
     end % of methods (protected)
     
     methods (Static)
-        function paramList = getParamList()
-            paramList = {'s0', 'diff', 'r1', 'r2', 'theta', 'phi', 'alpha'};
+        function paramList = getParamsList()
+            paramList = {'s0', 'diffPar', 'r1', 'r2', 'theta', 'phi', 'alpha'};
         end
         
         function hyperparamsList = getHyperparamsList()
@@ -581,7 +587,7 @@ classdef ellipticalCylinder < compartment
                             ' vector of size %d.\n'], obj.nParams));
                         
             assert(v(1) > 0, 'Value must be positive for "s0".');
-            assert(v(2) > 0, 'Value must be positive for "diff".');
+            assert(v(2) > 0, 'Value must be positive for "diffPar".');
             assert(v(3) > 0, 'Value must be positive for "r1".');
             assert(v(4) > 0, 'Value must be positive for "r2".');
         end
@@ -591,7 +597,7 @@ classdef ellipticalCylinder < compartment
                    'Value must be scalar, numeric, and positive.');
         end
         
-        function validationFCN_diff(obj, v)
+        function validationFCN_diffPar(obj, v)
             assert(isnumeric(v) && isscalar(v) && (v > 0), ...
                    'Value must be scalar, numeric, and positive.');
         end

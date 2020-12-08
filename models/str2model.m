@@ -116,6 +116,8 @@ function model = str2compartment(modelName)
             model = stickBD();
         case 'stick'
             model = stick();
+        case 'ellipticalCylinder'
+            model = ellipticalCylinder();
         otherwise
             error('model %s is not recognised', modelName);
     end            

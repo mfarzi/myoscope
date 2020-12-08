@@ -290,7 +290,12 @@ classdef stick < compartment
                                         % and the x-axis 
                 obj.modelParams = p;  
             end
-        end        
+        end
+        
+        function updateHyperparams(obj, p)
+            % do nothing
+        end
+        
     end % of methods (protected)
     
     methods (Static)
