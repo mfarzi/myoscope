@@ -1,4 +1,5 @@
 function [scheme, gVec] = myoscopeReadScheme(path2scheme)
+GAMMA = 2.6751525e8; % rad s-1 T-1
 fileID = fopen(path2scheme,'r');
 keepReading = true;
 
@@ -21,6 +22,32 @@ if strcmp(schemeType, 'STEJSKALTANNER')
     scheme = array2table(scheme, 'VariableNames', ...
         {'x', 'y', 'z', 'G_mag', 'DELTA', 'delta', 'TE'});
     
+    nScheme = size(scheme, 1);
+    
+    % compute b-vallue 
+    scheme.bval = (scheme.DELTA-scheme.delta/3).*((scheme.delta .*scheme.G_mag)*GAMMA).^2*1e-6;
+    
+    % compute nominal b-value
+    classNo = zeros(nScheme, 1);
+    bvalNominal = scheme.bval(1);
+    classNo(1) = 1;
+    nClass = 1;
+    for n=2:nScheme
+        tolerance = max(10, 0.1*bvalNominal);
+        thisClassNo = find(abs(bvalNominal-scheme.bval(n))<tolerance);
+        if isempty(thisClassNo)
+            nClass = nClass + 1;
+            classNo(n) = nClass;
+            bvalNominal = [bvalNominal; scheme.bval(n)];
+        else
+            classSize = sum(classNo==thisClassNo);
+            bvalNominal(thisClassNo) = (classSize*bvalNominal(thisClassNo)+...
+                                        scheme.bval(n))/(classSize+1);
+            classNo(n) = thisClassNo;
+        end
+    end
+    scheme.bvalNominal = floor(bvalNominal(classNo));
+    
     % add the direction
     N = size(scheme, 1);
     scheme.G_dir = zeros(N, 1);
@@ -28,7 +55,7 @@ if strcmp(schemeType, 'STEJSKALTANNER')
     nDir = 0;
     for n = 1:N
         thisVec = [scheme.x(n); scheme.y(n); scheme.z(n)];
-        if sum(thisVec)==0
+        if sum(thisVec)==0 || abs(scheme.bvalNominal(n))<10
             continue;
         end
         
@@ -54,13 +81,14 @@ if strcmp(schemeType, 'STEJSKALTANNER')
         end
     end 
     
-    % add b-value
-    GAMMA = 2.6751525e8; % rad s-1 T-1
-    bval = (scheme.DELTA-scheme.delta/3).*((scheme.delta .*scheme.G_mag)*GAMMA).^2*1e-6;
-    scheme.bval = bval;
-    
     % consider repetitions
-    scheme.rep = ones(size(scheme,1),1);
+    % if DELTA, delta, TE, G_dir, and b-values are the same, then these
+    % scans are considered as repeated measurements
+    
+    % consider different b-values with 10% variation
+    tbl = [scheme.DELTA, scheme.delta, scheme.TE, scheme.G_dir, scheme.bvalNominal];
+    [~,~,ic] = unique(tbl, 'rows');
+    scheme.rep = ic;
 else
     scheme = [];
 end
