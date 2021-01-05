@@ -1,4 +1,4 @@
-function model = myoscopeLoadModel(fileName)
+function model = load(fileName)
 % LOADCOMPARTMENTMODEL load compartment model 
 %   model = LOADCOMPARTMENTMODEL(filename)
 %   returns a multi-compartment object with given configurations.

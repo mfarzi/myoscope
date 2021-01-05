@@ -1,4 +1,4 @@
-function myoscopeSaveModel(model, fileName)
+function save(model, fileName)
 % saveModelConfig write the model configuration into a simple text file.
 
 % Mohsen Farzi
