@@ -1,7 +1,11 @@
-classdef (Abstract) compartment < handle 
-    % compartment 
+classdef multicompartment < handle 
+    % MULTICOMPARTMENT 
     %
-    %   compartment is an Abstract parametric model class for 
+    %   A MULTICOMPARTMETN object allows combining arbitrary number of  
+    %   COMPARTMETN objects into a single model. This class encapsulates 
+    %   the model parameters and basic methods for fitting the parameters
+    %   to diffusion weigthed MR signals or synthesize signals for a given
+    %   diffusion scheme.compartment is an Abstract parametric model class for 
     %   data synthesis or model fitting. 
     %
     %   Note: Subclasses must implement the synthesize method. This class

@@ -1,4 +1,9 @@
 function model = str2model(modelName, params)
+    if isempty(modelName)
+        model = [];
+        return;
+    end
+    
     modelTree = generateTree(modelName);
     
     % convert strings into compartment models in leaves
