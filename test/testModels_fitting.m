@@ -8,7 +8,7 @@ addpath('../linker');
 addpath('../utility');
 addpath('../../utility/');
 
-path_to_data = ['./testData/synthetic/'];
+path_to_data = './testData/synthetic/';
 
 algorithm = 'conjugate-gradient';%'levenberg-marquardt'; %'interior-point' %;            
 %% tensor  

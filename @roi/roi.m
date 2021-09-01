@@ -18,7 +18,7 @@ classdef roi < handle
     % Mohsen Farzi
     % Email: m.farzi@leeds.ac.uk
     
-    properties (Access = 'private')                              
+    properties (SetAccess = 'private')                              
         index = [];           % index to the selected voxels in ROI
                               % i + nrow*(j-1) + nrow*ncol*(k-1)     
         nrow = [];            % number of rows in the image

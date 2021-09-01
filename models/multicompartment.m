@@ -1,558 +1,234 @@
-classdef multicompartment < handle 
-    % MULTICOMPARTMENT 
+classdef multicompartment < compartment 
+    %MULTICOMPARTMENT 
     %
-    %   A MULTICOMPARTMETN object allows combining arbitrary number of  
+    %   A MULTICOMPARTMENT object allows combining one, two, or more basic 
     %   COMPARTMETN objects into a single model. This class encapsulates 
     %   the model parameters and basic methods for fitting the parameters
     %   to diffusion weigthed MR signals or synthesize signals for a given
-    %   diffusion scheme.compartment is an Abstract parametric model class for 
-    %   data synthesis or model fitting. 
+    %   diffusion scheme.
     %
-    %   Note: Subclasses must implement the synthesize method. This class
-    %   implements a default getJacobian method, which estimates the
-    %   jacobian of the signal with respect to the model parameters
-    %   numerically. For greater efficiency during model fitting,
-    %   subclasses should override the numerical estimation with analytic
-    %   expressions.
+    %   For mathematical background see
+    %       Panagiotaki, E., Schneider, T., Siow, B., Hall, M.G., Lythgoe,
+    %       M.F. and Alexander, D.C., "Compartment models of the diffusion
+    %       MR signal in brain white matter: a taxonomy and comparison.",
+    %       Neuroimage, 59(3), pp.2241-2254, 2012.
     %
-    %   methods (public):
-    %       fit             - fit model parameters to measured signals
-    %       fitMultiRun     - run the optimisation using different 
-    %                         initial points selected randomly.
-    %       synthesize      - synthesize attenuation signals
-    %       getCost         - return the Root Mean Square (RMS) error of
-    %                         the fitted model
-    %       getParams       - return the model parameters in a column
-    %                         vector
-    %       getParamsNum    - return the number of model parameters
-    %       getFixedParams  - return a logical column vector stating if a
-    %                         parameter is fixed (true) or not (false).
+    %   properties (public):
+    %       name           - Model name
+    %       nParams        - Number of model parameters
+    %       nHyperparams   - Number of hyper-parameters
     %
-    %   methods (TO BE IMPLEMENTED IN SUB-CLASSES):
-    %       synthesize       - return signal from the specific model.
-    %       getJacobian     - return the gradient of model wrt to its 
-    %                         parameters. (analytic solution)
-    %       linkFun         - define appropriate link functions for each
-    %                         model parameters to enforce spicific criteria
-    %                         for each parameter; ex. positivity of
-    %                         diffusivity is enforced using x^2 function.
-    %       invLinkFun      - define inverse link functions
-    %       randomInit      - set random initial values for the parameters
-    %       updateParams    - update model parameters
-    %       set             - allow setting model parameters
+    %    properties (private):
+    %       comp           - Cell array of constructing compartments
+    %       links          - A column vector of class LINKER to map
+    %                        unconstrained optimisation variables (x) to
+    %                        constrained parameters (p).
+    %                        p = obj.links.link(x);
+    %                        x = obj.links.invLink(p);
     %
-    %   properties (TO BE IMPLEMENTED IN SUB-CLASSES):
-    %       fitter          - an "optimizer" object used for fitting model
-    %                         parameters to data
-    %       modelParams     - a column-wise numberical vector including all
-    %                         model parameters
-    %       fixedParams     - a column-wise boolean vector with the same
-    %                         size as modelParams. if fixedParams(i) is 
-    %                         false, then the i-th parmeter is included in
-    %                         the optimisation.
-    %       nParams         - the total number of parameters in the model
+    %    methods:
+    %       fit            - Fit model parameters to diffusion signals.
+    %       synthesize     - Synthesize signals for the input diffusion scheme
+    %       set            - Set model parameters or hyperparameters using
+    %                        their names. Use getParamsList() to see the
+    %                        semantic parameter names.
+    %       randomInit     - randomly initialise model parameters.
+    %       getCost        - return the Root Mean Square (RMS) error of
+    %                        the fitted model. see class COMPARTMENT.
+    %       getParams      - return the model parameters in a column
+    %                        vector. see class COMPARTMENT.
+    %       getParamsNum   - return the number of model parameters.
+    %                        see class COMPARTMENT.
     %
-    %   See also: tensor, ball, zeppelin, cylinder, ellipticalCylinder,
-    %   stick, threeCompartmentModel, twoCompartmentModel
+    %   See also: compartment, tensor, ball, zeppelin, stick, cylinder,
+    %   ellipticalCylinder
     %
     % Mohsen Farzi
     % Email: m.farzi@leeds.ac.uk
     
-    properties (Constant=true, Access=protected)
-        % the gyromagnetic Ratio (copied from camino source codes)
-        GAMMA = 2.6751525e8; 
-        
-        % 60 first roots from the equation J'1(x)=0
-        % J'1 is the derivative of the first order bessel function
-        % (copied from camino source codes)
-        Jp1ROOTS = ...
-         [1.84118307861360, 5.33144196877749, 8.53631578218074, ...
-          11.7060038949077, 14.8635881488839, 18.0155278304879, ...
-          21.1643671187891, 24.3113254834588, 27.4570501848623, ...
-          30.6019229722078, 33.7461812269726, 36.8899866873805, ...
-          40.0334439409610, 43.1766274212415, 46.3195966792621, ...
-          49.4623908440429, 52.6050411092602, 55.7475709551533, ...
-          58.8900018651876, 62.0323477967829, 65.1746202084584, ...
-          68.3168306640438, 71.4589869258787, 74.6010956133729, ...
-          77.7431620631416, 80.8851921057280, 84.0271895462953, ...
-          87.1691575709855, 90.3110993488875, 93.4530179063458, ...
-          96.5949155953313, 99.7367932203820, 102.878653768715, ...
-          106.020498619541, 109.162329055405, 112.304145672561, ...
-          115.445950418834, 118.587744574512, 121.729527118091, ...
-          124.871300497614, 128.013065217171, 131.154821965250, ...
-          134.296570328107, 137.438311926144, 140.580047659913, ...
-          143.721775748727, 146.863498476739, 150.005215971725, ...
-          153.146928691331, 156.288635801966, 159.430338769213, ...
-          162.572038308643, 165.713732347338, 168.855423073845, ...
-          171.997111729391, 175.138794734935, 178.280475036977, ...
-          181.422152668422, 184.563828222242, 187.705499575101]';
-    end
-    
     properties (SetAccess = 'protected')
-        fitter = optimizer();           % an "optimizer" object for fitting
-                                        % model parameters
+        name = '';               % Class name derived from its compartments
+        nCompartments = [];      % number of basic COMPARTMETNT objects
+        nParams = [];            % Number of parameters
+        nHyperparams = [];       % Number of                                                  
     end
     
-    properties (Abstract, SetAccess = 'protected')
-        links;                          % vector of type LINKER that maps
-                                        % constrained model parameters to
-                                        % unconstrained optimisation
-                                        % variables
+    properties (Access='protected') 
+        comp = [];               % List of COMPARTMENT object 
+        links     = [];          % vector of type LINKER that maps 
+                                 % constrained model parameters to
+                                 % unconstrained optimisation
+                                 % variables 
+        hyperparams = [];
+        hyperparamsName = {};
     end
     
-    properties (Abstract, Access=protected)                                
-        modelParams;                    % numerical column vector including
-                                        % all model parameters
+    methods
+        function obj = multicompartment(varargin) 
+            %MULTICOMPARTMETNMODEL Construct Function.
+            %
+            %   multicompartment(name) constructs a compartment model using
+            %   the input model name. 
+            %
+            %   multicompartment(comp1, comp2,...) constructs a combined
+            %   model with given compartments.
+            % 
+            
+            % check for the number of input arguments
+            assert(nargin>0, 'MATLAB:multicompartment:construct',...
+                   'Too few input arguments.');
+            
+            % check consistency for multicompartment(name)
+            modelName = varargin{1};
+            if ischar(modelName)
+                assert(nargin==1, 'MATLAB:multicompartment:construct',...
+                       'Too many input arguments.');
+                model = multicompartment.str2model(modelName);
+                if isa(model, 'multicompartment')
+                    obj = model;
+                    return; 
+                else
+                    obj = multicompartment(model);
+                    return;
+                end
+            end
+            
+            % check consistency for multicompartment(comp1, comp2,...)
+            obj.nCompartments = nargin;
+            obj.comp = varargin';
+            % check if input compartments are valid inputs
+            for i = 1:obj.nCompartments
+                validateattributes(obj.comp{i}, ...
+                    {'compartment', 'multicompartment'},...
+                    {},'multicompartment:construction');
+            end
+            
+            % set the object name
+            nameArray = cellfun(@(c) c.name, obj.comp, 'UniformOutput', false);
+            obj.name = strcat('[',strjoin(nameArray, '-'),']');
+            
+            % count the total number of paramters 
+            nParamsArray = cellfun(@(c) c.nParams, obj.comp);
+            obj.nParams = 1 + sum(nParamsArray);
+            
+            % count the total number of hyper-paramters
+            nHyperparamsArray = cellfun(@(c) c.nHyperparams, obj.comp);
+            obj.nHyperparams = sum(nHyperparamsArray);
+            
+            % vectorise all hyper-parameters into a single vector 
+%             hyperparamsCell = cellfun(@(c) c.getHyperparams(),...
+%                                  obj.comp, 'UniformOutput', false);
+%             obj.hyperparams = cell2mat(hyperparamsCell);
+            
+            % update hyper-parameters name and values
+            hparamsName = cell(obj.nHyperparams, 1);
+            hparams = zeros(obj.nHyperparams, 1);
+            iStart = 1;
+            for i = 1:obj.nCompartments
+                hparamsNum = obj.comp{i}.nHyperparams; 
+                if hparamsNum>0
+                    iEnd = iStart + hparamsNum -1;
+                    [thisHparams,thisHparamsName] = obj.comp{i}.getHyperparams();
+                    thisHparamsName = cellfun(@(x) sprintf('comp%d.%s', i, x),...
+                        thisHparamsName, 'UniformOutput', false);
+                    hparamsName(iStart:iEnd) = thisHparamsName;
+                    hparams(iStart:iEnd) = thisHparams;
+                    iStart = iEnd + 1;
+                end
+            end
+            obj.hyperparamsName = hparamsName;
+            obj.hyperparams = hparams;
+            
+            % vectorise all linking functions into a single vector
+            linksArray = linker('s0', 'bounded', 0, 1);
+            for i = 1:obj.nCompartments
+                thisCompLinks = obj.comp{i}.getLinks();
+                thisCompLinks(1).setName(strrep(thisCompLinks(1).getName(), 's0', 'vol'));
+                thisCompParamsName = cellfun(@(c) sprintf('comp%d.%s', i, c), thisCompLinks.getName(), 'UniformOutput', false);
+                thisCompLinks.setName(thisCompParamsName);
+                linksArray = [linksArray; thisCompLinks];
+            end
+            obj.links = linksArray;
+            
+            % set constraint \sum_i comp_i = 1
+            if obj.nCompartments==1
+                obj.links.addConstraint('comp1.vol=1');
+            elseif obj.nCompartments==2
+                obj.links.addConstraint('comp2.vol=1-comp1.vol');
+            elseif obj.nCompartments>2
+                str = '1-comp1.vol';
+                for n=2:obj.nCompartments-1
+                    obj.links.addConstraint(sprintf('comp%d.vol<=%s', n, str));
+                    str = strcat(str, sprintf('-comp%d.vol', n));
+                end
+                obj.links.addConstraint(sprintf('comp%d.vol=%s', obj.nCompartments, str));    
+            end
+        end % of constructor   
         
-        hyperparams;                                
-        nParams;                        % total number of model parameters 
-        
-    end
-    
-    methods (Abstract, Access=protected)
-        s   = synthesize(obj, scheme);
-        jac = jacobian(obj, scheme);
-        updateParams(obj, p);
-        updateHyperparams(obj, p);
-    end
-    
-    methods (Abstract)
-        set(obj, varargin);
-        rotateAxis(obj);
-    end
-    
-    methods (Access = public)
-        function s = synth(obj, scheme)
-            % return synthetically generated signal
-            s = obj.synthesize(scheme);
+        function [sig, out] = synthesize(obj, params, scheme)
+            % synthesize is a method for class MULTICOMPARTMENT
+            %
+            % synthesize(obj, scheme, params, hparams) synthesize DW-MR signal for the 
+            % input diffusion scheme by adding the weighted signals from each 
+            % compartment: s = s0 *sum_i f_i*s_i
+            % 
+            nScheme = size(scheme, 1);
+            s = zeros(nScheme, 1);
+
+            s0 = params(1);
+            iStartParams = 2;
+            for i = 1:obj.nCompartments
+                iEndParams = iStartParams + obj.comp{i}.nParams()-1;
+
+                s = s + obj.comp{i}.synthesize(params(iStartParams:iEndParams),...
+                                               scheme);
+
+                iStartParams  = iEndParams+1;
+            end
+            sig = s0*s;
+            if nargout==2
+                out.s = s;
+            end
         end
 
-        function p = fit(obj, scheme, data)
-            % fti(obj, scheme, data) fit model parameters to the given
-            % data.
+        function jac = jacobian(obj, params, scheme)
+            % jacobian is a method for class MULTICOMPARTMENT
+            %
+            % jacobian(obj,params, scheme, hparams) returns jacobian of synthesized
+            % DW-MR signal with respect to model parameters. 
+            %
+            %       Input arguments:
+            %                params: Numerical column vector of all model
+            %                        parameters
+            %                scheme: Diffusion scheme
+            %
+            %      output arguments:
+            %                   jac: Numerical matrix of size M x nParams.
             %
 
-            % check consistency between data and scheme file
-            if length(data)~=size(scheme, 1)
-                error('MATLAB:inconsistentDimensions'            ,...
-                     ['The vector d shoudl have the same number ',...
-                      'of elements as the number of measurments ',...
-                      'in the scheme file.\n']); 
-            end
+            [f0, out] = obj.synthesize(params, scheme);  
             
-            % read initial values for the model parameters
-            p0 = obj.modelParams;
-            
-            % transform model parameters to the optimisation parametrs by
-            % passing through link-functions
-            x0 = obj.modelToOpt(p0);
-            
-            % Do the optimisation using matlab built-in functions
-            obj.fitter.setfeval(@(x) obj.Feval(x, scheme, data))
-            obj.fitter.setfjac(@(x) obj.fjac(x, scheme));
-            
-            [x, cost, exitFlag] = obj.fitter.run(x0);
+            % read intermediate variables
+            gf0_gs0 = out.s;
 
-            p = obj.optToModel(x);
-            obj.updateParams(p);
-            obj.rotateAxis();
-            p = [exitFlag; cost; obj.modelParams];
-        end
-        
-        function [p, P] = fitMultiRun(obj, scheme, data, nReps)
-            % fitMultiRun run the optimisation problem from different
-            % starting points and return the the best-fit model parameters
-            % p.
-            % 
-            if nargin == 3
-                nReps = 50;
-            end
+            % gradient wrt s0
+            jac(:,1) = gf0_gs0;
+            
+            nScheme = size(scheme, 1);
+            jac = zeros(nScheme, obj.nParams);
+            
+            s0  = params(1);
+            iStartParams = 2;
+            % gradient wrt to each compartment
+            for i = 1: obj.nCompartments
+                iEndParams = iStartParams + obj.comp{i}.nParams-1;
 
-            % check consistency between data and scheme file
-            if size(data,1)~=size(scheme, 1)
-                error('MATLAB:inconsistentDimensions'            ,...
-                     ['The vector d shoudl have the same number ',...
-                      'of elements as the number of measurments ',...
-                      'in the scheme file.\n']); 
-            end
+                gf_gThisComp = obj.comp{i}.jacobian(params(iStartParams:iEndParams),...
+                                                    scheme);
+                jac(:,iStartParams:iEndParams) = s0*gf_gThisComp;
 
-            P = zeros(obj.nParams+2, nReps);
-            
-            obj.fitter.setfeval(@(x) obj.Feval(x, scheme, data))
-            obj.fitter.setfjac(@(x) obj.fjac(x, scheme));
-            parfor i = 1:nReps
-                p0 = obj.randomInit();
-                x0 = obj.modelToOpt(p0);
-                [thisX, thisCost, exitflag] = obj.fitter.run(x0);
-                thisP = obj.optToModel(thisX);
-                P(:, i) = [exitflag; thisCost; thisP];
+                iStartParams = iEndParams + 1;
             end
-            [~, iMin] = min(P(2,:));
-            p = P(3:end, iMin);
-            obj.updateParams(p);
-            obj.rotateAxis();
-            p = [P(1:2, iMin); obj.getParams()];
-        end
-
-        function cost = getCost(obj, scheme, data)
-                s = obj.synthesize(scheme);
-                cost = sum((data-s).^2);
-        end
-        
-        function p = getParams(obj, option)
-            if nargin == 1
-                option = 'all';
-            end
-            
-            switch option
-                case 'all'
-                    p = obj.modelParams;
-                case 'free'
-                    isDummy = obj.links.getDummy;
-                    isConstant = obj.links.getConstant;
-                    p = obj.modelParams(not(isDummy) & not(isConstant));
-                case 'constant'
-                    isConstant = obj.links.getConstant;
-                    p = obj.modelParams(isConstant);
-                case 'dummy'
-                    isConstant = obj.links.getConstant;
-                    p = obj.modelParams(isConstant);
-                otherwise
-                    errString = strcat("Option '%s' is not recognised.", ...
-                                      "\nAvailable options are ", ...
-                                      "'all', 'free', 'constant',", ...
-                                      " and 'dummy'.");
-                   error('MATLAB:compartment:getParams', ...
-                         errString, option);
-            end
-        end
-        
-        function p = getHyperparams(obj)
-            p = obj.hyperparams;
-        end
-        
-        function links = getLinks(obj)
-            links = obj.links;
-        end
-        
-        function n = getParamsNum(obj, option)
-           if nargin == 1
-               option = 'all';
-           end
-           
-           switch option
-               case 'all'
-                   n = length(obj.modelParams);
-                   
-               case 'free'
-                   isConstantOrDummy = obj.links.getDummy | ...
-                                       obj.links.getConstant;
-                   n = sum(~isConstantOrDummy);
-                   
-               case 'constant'
-                   isConstant = obj.links.getConstant;
-                   n = sum(isConstant);
-                   
-               case 'dummy'
-                   isDummy = obj.links.getDummy();
-                   n = sum(isDummy);
-                   
-               otherwise
-                   errString = strcat("Option '%s' is not recognised.", ...
-                                      "\nAvailable options are ", ...
-                                      "'all', 'free', 'constant',", ...
-                                      " and 'dummy'.");
-                   error('MATLAB:compartment:getParamsNum', ...
-                         errString, option);
-           end
-        end
-        
-        function n = getHyperparamsNum(obj)
-            n = length(obj.hyperparams);
-        end
-        
-        
-        function v = getVolFraction(obj)
-            v = obj.s0;
-        end
-        
-        function addConstraint(obj, str)
-            % addConstraint(obj, str) enforce various constraints on model 
-            % parameters using appropriate linking functions.
-            % Inputs:
-            % obj:            Compartment model
-            % str:            An string identifying the type of constraint 
-            %                 Examples:
-            %                 1) 's0 = 1' set s0 as constant with value 1
-            %                 2) 'diffPar >= 1.5e-9'
-            %                 3) 'diffPar <= 1.5e-9'
-            %                 3) 'diffPar >= diffPerp1'
-            %                 4) 'diffPerp2 = diffPerp1'
-            
-            % extract model parameters
-            modelParamList = obj.getParamsList();
-            
-            % create string listing all parameters for printing if needed
-            msg = [];
-            for n = 1:obj.nParams-1
-                msg = strcat(msg, sprintf("'%s'", modelParamList{n}), ', ');
-            end
-            msg =  strcat(msg, sprintf("and '%s'", modelParamList{obj.nParams}), '.');
-            
-            % analyse input string
-            % step 1: remove all spaces
-            str(isspace(str))=[];
-            
-            % step 2: extract parameters and replace them with pi
-            [params, matches] = strsplit(str, {'+', '=', '>=', '<=', ...
-                                               ')', '(', '*', '/', '>', ...
-                                               '<', '^', '-', 'e-','e+'});
-            for i = 1:length(params)
-                thisParam = params{i};
-
-                isNotNumeric = isnan(str2double(thisParam));
-                isNotEmpty = ~isempty(thisParam);
-                
-                if isNotNumeric && isNotEmpty
-                     % check if param1 is a valid model parameter
-                    [isValidParamName, iParam] = ismember(thisParam, modelParamList);              
-                    if ~isValidParamName
-                        error(strcat("'%s' is not a valid parameter name.\n", ...
-                               "Valid variable names for class %s are %s."),...
-                               thisParam, obj.name, msg);
-                    end
-                    
-                    params{i} = sprintf('p%d', iParam);
-                end
-            end
-            
-            str = strjoin(params, matches);
-            obj.links.addConstraint(str);
-                    
-%             switch operator
-%                 case '='
-%                     if isNotNumeric
-%                         thisStr = sprintf('p%d=p%d', nLink1, nLink2);
-%                         obj.links.addConstraint(thisStr);
-%                     else
-%                         % check if numerical value is in range
-%                         if value < obj.links(nLink1).lowerBound
-%                             obj.links(nLink1).set('lowerBound', value);
-%                             
-%                         elseif value > obj.links(nLink1).upperBound
-%                             obj.links(nLink1).set('upperBound', value);
-%                         end
-%                         thisStr = sprintf('p%d=%d', nLink1, value);
-%                         obj.links.addConstraint(thisStr);
-%                     end
-%                     
-%                 case '>='
-%                     if isNotNumeric
-%                         thisStr = sprintf('p%d>=p%d', nLink1, nLink2);
-%                         obj.links.addConstraint(thisStr);
-%                     else
-%                         obj.links(nLink1).set('lowerBound', value);
-%                     end
-%                     
-%                 case '<='
-%                     if isNotNumeric
-%                         thisStr = sprintf('p%d>=p%d', nLink2, nLink1);
-%                         obj.links.addConstraint(thisStr);
-%                     else
-%                         obj.links(nLink1).set('upperBound', value);
-%                     end
-%                     
-%                 otherwise
-%                     error(strcat("'%s' is not a valid operator.\n" , ...
-%                           "Valid operators are '=', '>=' or '<='."), ...
-%                           operator);
-%                 %\\          
-%             end % of switch-case
-        end %of addConstraint
-        
-        function constraintList = getConstraints(obj)
-            constraintList = obj.links.getConstraints();
-        end
-        
-        function p = randomInit(obj, seed)
-            % randomInit initialise the model parameters randomly using 
-            % plausible biophysical ranges
-            if nargin == 2
-                % make sure random number generation is repeatable
-                rng(seed);
-            end
-            
-            p = obj.links.init();
-            obj.updateParams(p)
-        end
-        
-        function jac = getParamsJacobian(obj, scheme)
-            % return model jacobian wrt model parameters
-            jac = obj.jacobian(scheme);
-        end
-        
-        function jac = getJacobian(obj, scheme, flag)
-            % getJacobian return the gradient of singal wrt to optimisation
-            % parameters, i.e. model parameters passed through the linkFun.
-            
-            if nargin == 2
-                flag = false;
-            end
-            
-            if flag
-                % compute the jacobian matrix using numerical technique.
-                %\\
-                EPS = 1e-7;                 % epsilon used for computation
-                                            % of numerical derivatives
-
-                p0 = obj.getParams;            % model params
-                x0 = obj.links.invLink(p0);    % linking parameters
-                f0 = obj.synthesize(scheme);    % signal value
-
-                nOptParams = length(x0);
-                % initialise the jac with zeros
-                jac = zeros(size(scheme,1), nOptParams);
-                for n = 1:nOptParams
-                    x = x0; x(n) = x(n) + EPS;
-                    p = obj.links.link(x);
-                    obj.updateParams(p);
-                    jac(:,n) = (obj.synthesize(scheme) - f0)/EPS;
-                end
-                obj.updateParams(p0);
-                %\\
-            else
-                % compute jacobian matrix using analytic solution
-                paramsJac = obj.jacobian(scheme);
-                x = obj.links.invLink(obj.modelParams);
-                linkingJac = obj.links.jacobian(x);
-                jac = paramsJac * linkingJac;
-            end
-            %\\
-        end %of getJacobian
-        
-        function varargout = testJacobian(obj, scheme)
-            jac_num = getJacobian(obj, scheme, true);
-                        
-            jac_anl = getJacobian(obj, scheme, false);
-            
-            TOL = 1e-5;
-            
-            err = norm(jac_num(:)-jac_anl(:))/norm(jac_num(:));
-            if err<TOL
-                fprintf('Analytic solution is fine!\n');
-            else
-                fprintf('Analytic solution is buggy!\n');
-            end
-            
-            if nargout == 0
-                % do nothing!
-            elseif nargout == 1
-                varargout{1} = jac_anl;
-            elseif nargout == 2
-                varargout{1} = jac_anl;
-                varargout{2} = jac_num;
-            else
-                error('Improper number of outputs.\n');
-            end
-        end % of testjacobian
-        
-        function writeParams(obj, filename)
-            % save model parameters
-            % save roi as a text file
-            [filepath,name,ext] = fileparts(filename);
-            if isempty(filepath)
-                filepath = pwd;
-            end
-            if ~strcmp(ext, '.params')
-                warning('MATLAB:compartment:writeParams',...
-                        'The filename extension is changed to ".params".');
-                ext = '.params';    
-            end
-            filename = fullfile(filepath, strcat(name,ext));
-            if isfile(filename)
-                warning('MATLAB:compartment:writeParams',...
-                        'Filename is overwritten.\n %s', filename);
-            end
-            fileId = fopen(filename,'w');
-            fprintf(fileId, '##Parameters\n');
-            fprintf(fileId, '#$name\n');
-            fprintf(fileId, '%s\n', obj.name);
-            paramsList = obj.getParamsList;
-            params = obj.getParams;
-            for i=1:obj.getParamsNum
-                fprintf(fileId, '#$%s\n', paramsList{i});
-                fprintf(fileId, '%1.6e\n', params(i));
-            end
-            fclose(fileId);
-        end
-        %\\
-    end % of methods (public)
-    
-    methods (Access=protected)
-        
-        function x = modelToOpt(obj, p)
-            x = obj.links.invLink(p);
-        end
-        
-        function p = optToModel(obj, x)
-            p = obj.links.link(x);
-        end
-        
-        function f = feval(obj, x, scheme, data)
-            % compute the mean squared error f=\sum (s_m - d_m)^2
-            p = obj.optToModel(x);
-            obj.updateParams(p);
-            s = obj.synthesize(scheme);
-            f = sum((data-s).^2);
-        end
-        
-        function F = Feval(obj, x, scheme, data)
-            % compute the difference between model and measurements
-            % f[m] = s_m - d_m
-            p = obj.optToModel(x);
-            obj.updateParams(p);
-            s = obj.synthesize(scheme);
-            F = s - data;
-        end
-        
-        function jac = fjac(obj, x, scheme)
-            p = obj.optToModel(x);
-            obj.updateParams(p);
-            jac = obj.getJacobian(scheme);
-        end % of fgrad
-        
-        function gf = fgrad(obj, x, scheme, data)
-            jac = obj.fjac(x, scheme);
-            F   = obj.Feval(x, scheme, data);
-            gf = jac'*F*2;
-        end % of fgrad
-        %\\
-    end % of methods (protected)
-    
-    methods (Static)
-        function p = readParams(filename)
-            [filepath,name,ext] = fileparts(filename);
-            if isempty(filepath)
-                filepath = pwd;
-                filename = fullfile(filepath, strcat(name, ext));
-            end
-            if ~isfile(filename)
-                error('MATLAB:compartment:readParams',...
-                      'Filename does not exist.\n%s', filename);
-            end
-            p = struct;
-            fileId = fopen(filename, 'r');
-            thisLine = fgetl(fileId);
-            while ischar(thisLine)
-                if startsWith(thisLine, '#$')
-                    paramName = thisLine(3:end);
-                    paramVal = str2double(fgetl(fileId));
-                    p = setfield(p, paramName, paramVal);
-                end
-                
-                thisLine = fgetl(fileId);
-            end
-            fclose(fileId);
-        end%of readParams
-    end
-end
+        end%of jacobian
+    end%of methods (public)
+end%of class multicompartment

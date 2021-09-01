@@ -1,13 +1,12 @@
-classdef zeppelin < tensor
-    % ZEPPELIN
+classdef pancake < tensor
+    % PANCAKE
     %
-    %   A ZEPPELIN object is a prolate TENSOR where the secondary and the 
-    %   tertiary diffusion eigenvalues are similar and less than the
-    %   primary eigenvalue. Since the secondary (u2) and tertiary (u3)
-    %   eigenvectors are free to rotate about the primary eigenvector (u1),
+    %   A PANCAKE object is an oblate TENSOR where the primary and the 
+    %   secondary diffusion eigenvalues are similar and greater than the
+    %   tertiary eigenvalue. Since the primary (u1) and secondary (u2)
+    %   eigenvectors are free to rotate about the third eigenvector (u3),
     %   here we assume alpha=pi/2 to address the degeneracy in the
     %   parameter space. This class only overwrites the getlinks method.
-    %   This class should be used as input to MULTICOMPARTMENT class.
     %
     %   Model Parameters:
     %       s0                - Normalised b0-signal 
@@ -28,34 +27,32 @@ classdef zeppelin < tensor
     %                           z-axis. [radian]
     %
     %   For mathematical background see
-    %       Panagiotaki, E., Schneider, T., Siow, B., Hall, M.G., Lythgoe,
-    %       M.F. and Alexander, D.C., "Compartment models of the diffusion
-    %       MR signal in brain white matter: a taxonomy and comparison.",
-    %       Neuroimage, 59(3), pp.2241-2254, 2012.
+    %       Basser, P.J., Mattiello, J. and LeBihan, D., "MR diffusion 
+    %       tensor spectroscopy and imaging.", Biophysical journal, 66(1),
+    %       pp.259-267, 1994.
     %
     %
-    %   See also: multicompartment, tensor, pancake, ball
+    %   See also: tensor, ball, zeppelin, and multicompartment
     %
     % Mohsen Farzi
-    % Email: m.farzi@leeds.ac.uk
-        
+    % Email: m.farzi@leeds.ac.uk   
+    
     methods
-        function obj = zeppelin()
-            %ZEPPELIN Construct Function.
+        function obj = pancake()
+            %PANCAKE Construct Function.
             %
-            %   zeppelin() constructs a single-compartment model
+            %   pancake() constructs a single-compartment model
             
-            obj.name = 'zeppelin';
+            obj.name = 'pancake';
             
             % initialise the linking functions to map constrained model
             % parameters to unconstrained optimisation variables.
             links = obj.getLinks();
-            % set diffPepr1 = diffPerp2
-            links.addConstraint('diffPerp1=diffPerp2');
+            % set diffPar = diffPerp1
+            links.addConstraint('diffPar=diffPerp1');
             % set alpha = pi/2
             links.addConstraint('alpha=pi/2');
             obj.links = links;
         end
     end % methods (public)
-    %\\
-end % of ZEPPELIN class
+end% of PANCAKE class

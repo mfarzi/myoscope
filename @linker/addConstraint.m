@@ -1,13 +1,144 @@
 function addConstraint(obj, str)
-    % addConstraint is a method for LINKER object. 
+    % addConstraint is a method for class LINKER. 
     % 
-    % List of possible contraints are:
-    % 'pi = pj'
+    % addConstraint(obj, str) enforce a new constraint over the object
+    % variables.
+    %       Input Arguments:
+    %                   obj: A column linker object
+    %                   str: Input of type char. Semantic parameter names
+    %                        must be used. See getParamsName(obj) for a 
+    %                        list of valid semantic names.
+    %                        Examples:
+    %                           1) 's0 = 1' set s0 as constant with value 1
+    %                           2) 'diffPar >= 1.5e-9'
+    %                           3) 'diffPar <= 1.5e-9'
+    %                           4) 'diffPar >= diffPerp1'
+    %                           5) 'diffPerp2 = diffPerp1'
     %
-    % for inequality; 'Pi >= Pj'
+    
+    % parse input constraint
+    config = parseConstraint(obj, str);
+    
+    % equality constraint, constant value
+    if strcmp(config.type, '=') && isempty(config.rhv)
+        index = config.lhv;
+        C = config.fh();
+        if obj(index).bounded
+            assert(C<=obj(index).maximum && C>=obj(index).minimum,...
+                'MATLAB:linker:addConstraint',...
+                '%s must be between %1.4e and %1.4e.',...
+                obj(index).name, obj(index).minimum, obj(index).maximum);
+        end
+        
+        obj(index).type = 'constant';
+        obj(index).dependence = [];
+        obj(index).constraint = config.str;
+        obj(index).fval = @(~,~,~,~) C;
+        obj(index).fvalinv = @(~,~,~) 0;
+        obj(index).fgrad = @(~,~,~) 0;
+        obj(index).ubound = @(~,~,~) [];
+        obj(index).lbound = @(~,~,~) [];
+        obj(index).uboundgrad = @(~,~,~) [];
+        obj(index).lboundgrad = @(~,~,~) [];
+        obj.updateCompOrder();
+        return;
+    end
+    
+    % equality constraint, dummy variable
+    if strcmp(config.type, '=') && not(isempty(config.rhv))
+        index = config.lhv;
+        obj(index).type = 'dummy';
+        obj(index).constraint = config.str;
+        obj(index).dependence = config.rhv;
+        obj(index).fval = @(~,P,~,~) config.fh(P);
+        obj(index).fvalinv = @(~,~,~) 0;
+        obj(index).fgrad = @(jac, P) config.gh(jac, P);
+        
+        obj(index).ubound = @(~,~,~) [];
+        obj(index).lbound = @(~,~,~) [];
+        obj(index).uboundgrad = @(~,~,~) [];
+        obj(index).lboundgrad = @(~,~,~) [];
+        obj.updateCompOrder();
+        return;
+    end
+    
+    % set the lowerbound
+    if strcmp(config.type, '>=') && isempty(config.rhv)
+        index = config.lhv;
+        C = config.fh();
 
-    % remove spaces
-    str(isspace(str))=[];
+        assert(obj(index).bounded, ...
+            'MATLAB:linker:addConstraint',...
+            '%s must be bounded to set a lower bound.',...
+            obj(index).name);
+        assert(obj(index).maximum>C, ...
+            'MATLAB:linker:addConstraint',...
+            'Input lower bound must be less than %1.4e.',...
+            obj(index).maximum);
+        
+        obj(index).minimum = C;
+        return;
+    end
+    
+    % dependent parameter where lowerband is a function of other variables
+    if strcmp(config.type, '>=') && not(isempty(config.rhv))
+        index = config.lhv;
+        assert(obj(index).bounded && strcmp(obj(index).type,'independent'), ...
+            'MATLAB:linker:addConstraint',...
+            '%s must be bounded and independent to enforce inequality constraint.',...
+            obj(index).name);
+        idx = obj.getDependent(config.rhv);
+        assert(sum(index==idx)==0, 'MATLAB:linker:addConstraint',...
+            'Right-hand expression must be independent of %s.',...
+            obj(index).name);
+        
+        obj(index).type = 'dependent';
+        obj(index).constraint = config.str;
+        obj(index).dependence = config.rhv;
+        obj(index).lbound = @(p,~,~) config.fh(p);
+        obj(index).lboundgrad = @(jac, p, ~) config.gh(jac, p);
+        obj.updateCompOrder();
+        return;
+    end
+    
+    % set the upperbound
+    if strcmp(config.type, '<=') && isempty(config.rhv)
+        index = config.lhv;
+        C = config.fh();
+
+        assert(obj(index).bounded, ...
+            'MATLAB:linker:addConstraint',...
+            '%s must be bounded to set a lower bound.',...
+            obj(index).name);
+        assert(obj(index).minimum<C, ...
+            'MATLAB:linker:addConstraint',...
+            'Input upper bound must be greater than %1.4e.',...
+            obj(index).minimum);
+        
+        obj(index).maximum = C;
+        return;
+    end
+    
+    % dependent parameter where upperband is a function of other variables
+    if strcmp(config.type, '<=') && not(isempty(config.rhv))
+        index = config.lhv;
+        assert(obj(index).bounded && strcmp(obj(index).type,'independent'), ...
+            'MATLAB:linker:addConstraint',...
+            '%s must be bounded and independent to enforce inequality constraint.',...
+            obj(index).name);
+        idx = obj.getDependent(config.rhv);
+        assert(sum(index==idx)==0, 'MATLAB:linker:addConstraint',...
+            'Right-hand expression must be independent of %s.',...
+            obj(index).name);
+        
+        obj(index).type = 'dependent';
+        obj(index).constraint = config.str;
+        obj(index).dependence = config.rhv;
+        obj(index).ubound = @(p,~,~) config.fh(p);
+        obj(index).uboundgrad = @(jac, p, ~) config.gh(jac, p);
+        obj.updateCompOrder();
+        return;
+    end
     
     %--- pi=c -------------------------------------------------------------
     % check if str is a constant constraint
@@ -567,4 +698,4 @@ function [linkNo, flag] = str2linkNo(str)
     [linkNo, ~, msg] = sscanf(str, 'p%d');
     flag = isempty(msg) && isscalar(linkNo);
 end
-        
+
