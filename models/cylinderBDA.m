@@ -41,7 +41,7 @@ classdef cylinderBDA < compartment
         name = 'cylinderBDA';    
         nCompartments = 1;     % number of basic COMPARTMETNT objects 
         nParams = 8;
-        nHyperparams = 2;
+        nHyperparams = 1;
     end
     
     properties (Access = 'protected')
@@ -72,8 +72,8 @@ classdef cylinderBDA < compartment
             obj.links.addConstraint('kappa2>=kappa1');
             
             % set hparams and hparams names
-            obj.hyperparams = [50; 50];
-            obj.hyperparamsName = {'nBinsTheta'; 'nBinsPhi'};
+            obj.hyperparams = 1202;
+            obj.hyperparamsName = {'npts'};
         end
         
         function [s, tmpAccessMemory] = synthesize(obj, params, scheme)
@@ -104,18 +104,12 @@ classdef cylinderBDA < compartment
             kappa2      = params(8);
             
             % read hyper-parameters
-            nBinsTheta = obj.hyperparams(1);
-            nBinsPhi   = obj.hyperparams(2);
+            npts = obj.hyperparams(1);
+           
+            [orientations, weights] = math.sampleSphere('lebedev', npts);            
+            probs = bingham.pdf(...
+                [theta, phi, alpha, 0, kappa1, kappa2]', orientations, weights);
             
-            % get Unit Frame
-            U = math.getUnitFrame(theta, phi, alpha);
-            cB = cylinderBDA.cBingham(-kappa1, -kappa2); % constant for bingmham distribution
-            [probs, thisTheta, thisPhi] = cylinderBDA.discritiseBinghamDistribution(U, nBinsTheta, nBinsPhi, kappa1, kappa2, cB);  
-            
-            % compute cylinder axes for each (theta, phi) [3 x nInstance]
-            n = [cos(thisPhi(:)).*sin(thisTheta(:)),...
-                 sin(thisPhi(:)).*sin(thisTheta(:)),...
-                 cos(thisTheta(:))]';
             
             % gradient matrix [nScheme x 3] for each measurment
             G_dir = [scheme.x, scheme.y, scheme.z];
@@ -123,7 +117,7 @@ classdef cylinderBDA < compartment
             
             % comput the gradient along and perpendicular
             % to the cylinder axis [nScheme x nInstance]
-            Gpar_mag = (G_dir*n).*G_mag;
+            Gpar_mag = (G_dir*orientations').*G_mag;
             Gpar_mag2 = Gpar_mag.^2; 
             Gperp_mag2 = G_mag.^2-Gpar_mag2; 
             
@@ -142,9 +136,9 @@ classdef cylinderBDA < compartment
             sig = s0 * sPerp .* sPar;
             
             % compute the average wrt Bingham Distribution
-            weights = probs.*sin(thisTheta(:));
-            s = sig*weights;
-            gf0_gs0 = (sPerp.*sPar)*weights;
+            %weights = probs.*sin(thisTheta(:));
+            s = sig*probs;
+            gf0_gs0 = (sPerp.*sPar)*probs;
             
             if nargout == 2
                 tmpAccessMemory.gf0_gs0 = gf0_gs0;
@@ -156,12 +150,8 @@ classdef cylinderBDA < compartment
                 tmpAccessMemory.nom   = nom;
                 tmpAccessMemory.denom = denom;
                 tmpAccessMemory.probs = probs;
+                tmpAccessMemory.orientations = orientations;
                 tmpAccessMemory.weights = weights;
-                tmpAccessMemory.theta = thisTheta(:);
-                tmpAccessMemory.phi   = thisPhi(:);
-                tmpAccessMemory.n     = n;
-                tmpAccessMemory.U = U;
-                tmpAccessMemory.cB = cB;
             end
         end
         
@@ -178,7 +168,7 @@ classdef cylinderBDA < compartment
             %                   jac: Numerical matrix of size M x nParams.
             %
             % synthesize signal
-            [f0, tmpAccessMemory] = obj.synthesize(params, scheme);
+            [~, tmpAccessMemory] = obj.synthesize(params, scheme);
             
             % read intermediate variables
             gf0_gs0 = tmpAccessMemory.gf0_gs0;
@@ -188,11 +178,8 @@ classdef cylinderBDA < compartment
             Gperp_mag2 = tmpAccessMemory.Gperp_mag2;
             sig = tmpAccessMemory.sig;
             probs = tmpAccessMemory.probs;
+            orientations = tmpAccessMemory.orientations;
             weights = tmpAccessMemory.weights;
-            thisTheta = tmpAccessMemory.theta;
-            thisPhi = tmpAccessMemory.phi;
-            U = tmpAccessMemory.U;
-            cB = tmpAccessMemory.cB;
             
             % read params into individual model parameters
             s0          = params(1);   % b0 signal
@@ -221,7 +208,7 @@ classdef cylinderBDA < compartment
             gf_gDiffPar = -(gLpar_gDiffPar.*Gpar_mag2 + gLperp_gDiffPar.*Gperp_mag2).*sig;
             
             % gSgDiffPar: average gradient over the Bingham distribution
-            jac(:,2) = gf_gDiffPar*weights; 
+            jac(:,2) = gf_gDiffPar*probs; 
             
             % gradient wrt r
             % first compute gradients for each pair f(theta', phi') and then
@@ -230,125 +217,29 @@ classdef cylinderBDA < compartment
             gf_gR = -(gLperp_gR.*Gperp_mag2).*sig;
             
             % gSgR
-            jac(:,3)  = gf_gR*weights;
+            jac(:,3)  = gf_gR*probs;
             
-            %%          
-            u2 = U(:,2); u3 = U(:,3);
-            
-            [nX, nY, nZ]  = cylinderBDA.sphericalToCanonical(thisTheta, thisPhi, 1);
-            u2DotN = u2(1)*nX + u2(2)*nY + u2(3)*nZ;
-            u3DotN = u3(1)*nX + u3(2)*nY + u3(3)*nZ;
-            
-            gFb_gU2 = -2*kappa1*u2DotN.*probs.*[nX, nY, nZ];
-            gFb_gU3 = -2*kappa2*u3DotN.*probs.*[nX, nY, nZ];
-            
-            % gradient wrt theta
-            gU2_gTheta = [-cos(alpha)*cos(phi)*sin(theta); ...
-                          -cos(alpha)*sin(phi)*sin(theta); ...
-                          -cos(alpha)*cos(theta)];
-                     
-            gU3_gTheta = [ sin(theta)*cos(phi)*sin(alpha);...
-                           sin(theta)*sin(phi)*sin(alpha);...
-                           cos(theta)*sin(alpha)];
-                       
-            gFb_gTheta = gFb_gU2*gU2_gTheta + gFb_gU3*gU3_gTheta;   
+            %% gradient wrt Bingham distribution parameters
+            gBingham = bingham.jacobian([theta, phi, alpha, 0, kappa1, kappa2]',...
+                orientations, weights);
+               
             % gSgTheta 
-            jac(:,4)   = sig*(gFb_gTheta.*sin(thisTheta));
+            jac(:,4)   = sig*gBingham(:,1); 
             
-            % gradient wrt phi
-            gU2_gPhi   = [-sin(phi)*cos(alpha)*cos(theta) - cos(phi)*sin(alpha); ...          
-                           cos(phi)*cos(alpha)*cos(theta) - sin(phi)*sin(alpha); ...
-                           0];
-                       
-            gU3_gPhi   = [ sin(phi)*cos(theta)*sin(alpha) - cos(phi)*cos(alpha);...
-                          -cos(phi)*cos(theta)*sin(alpha) - sin(phi)*cos(alpha);...
-                         0];    
-                     
-            gFb_gPhi = gFb_gU2*gU2_gPhi + gFb_gU3*gU3_gPhi;
             % gSgPhi
-            jac(:,5)   = sig*(gFb_gPhi.*sin(thisTheta));
-            
-            % gradient wrt alpha             
-            gU2_gAlpha = [-sin(alpha)*cos(theta)*cos(phi) - cos(alpha)*sin(phi);...
-                          -sin(alpha)*cos(theta)*sin(phi) + cos(alpha)*cos(phi);
-                           sin(alpha)*sin(theta)];                     
-           
-            gU3_gAlpha = [-cos(alpha)*cos(theta)*cos(phi)+sin(alpha)*sin(phi);...
-                          -cos(alpha)*cos(theta)*sin(phi)-sin(alpha)*cos(phi);...
-                           cos(alpha)*sin(theta)];
-                       
-            gFb_gAlpha = gFb_gU2*gU2_gAlpha + gFb_gU3*gU3_gAlpha;           
+            jac(:,5)   = sig*gBingham(:,2);
+                     
             % gSgAlpha
-            jac(:,6)   = sig*(gFb_gAlpha.*sin(thisTheta));
+            jac(:,6)   = sig*gBingham(:,3); 
             
-            [gcB_gK1, gcB_gK2] = cylinderBDA.cBinghamGrad(-kappa1, -kappa2);
             % gSgKappa1
-            jac(:,7)   = sig*(weights.*(-u2DotN.^2+gcB_gK1/cB));
+            jac(:,7)   = sig*gBingham(:,5);
             
             % gSgKappa2
-            jac(:,8)   = sig*(weights.*(-u3DotN.^2+gcB_gK2/cB));
+            jac(:,8)   = sig*gBingham(:,6);
         end
         
     end%of methods (public)
-        
-    methods (Static)
-        function [probs, thisTheta, thisPhi] = discritiseBinghamDistribution(U, nBinsTheta, nBinsPhi, kappa1, kappa2, cB)
-            thetaVec = linspace(0, pi, nBinsTheta+1);
-            phiVec = linspace(0, 2*pi, nBinsPhi+1);
-            
-            [thisTheta, thisPhi] = meshgrid((thetaVec(1:nBinsTheta)+thetaVec(2:nBinsTheta+1))/2,...
-                (phiVec(1:nBinsPhi)+phiVec(2:nBinsPhi+1))/2);
-            
-            dS = (thetaVec(2:nBinsTheta+1)-thetaVec(1:nBinsTheta))'*...
-                 (phiVec(2:nBinsPhi+1)-phiVec(1:nBinsPhi));
-            dS = abs(dS/(4*pi));
-            
-            [x, y, z] = cylinderBDA.sphericalToCanonical(thisTheta, thisPhi, 1);
-            
-            n = [x(:), y(:), z(:)];
-            
-            probs = cylinderBDA.binghamPdf(n', U(:,2), U(:,3), -kappa1, -kappa2, cB);
-            probs = probs(:).*dS(:);
-        end
-        
-        function p = binghamPdf(n, u1, u2, kappa1, kappa2, cB)
-            p = exp(kappa1*(u1'*n).^2 + kappa2*(u2'*n).^2)/cB;
-        end
-
-        function [x, y, z] = sphericalToCanonical(theta, phi, r)
-            x = r.*sin(theta).*cos(phi);
-            y = r.*sin(theta).*sin(phi);
-            z = r.*cos(theta);
-        end
-        
-        function cB = cBingham(k1, k2)
-            cB = integral2(@(theta,phi) ...
-                 exp(k1*sin(theta).^2.*cos(phi).^2  + ...
-                     k2*sin(theta).^2.*sin(phi).^2).* ...
-                     sin(theta),0,pi,0,2*pi)/(4*pi);
-        end
-        
-        function [gcB_gK1, gcB_gK2] = cBinghamGrad(k1, k2)
-            gcB_gK1 = integral2(@(theta,phi) ...
-                                exp(k1*sin(theta).^2.*cos(phi).^2  + ...
-                                k2*sin(theta).^2.*sin(phi).^2).* ...
-                                sin(theta).^3.*cos(phi).^2, ...
-                                0,pi,0,2*pi)/(4*pi);
-                            
-            gcB_gK2 = integral2(@(theta,phi) ...
-                                exp(k1*sin(theta).^2.*cos(phi).^2  + ...
-                                k2*sin(theta).^2.*sin(phi).^2).* ...
-                                sin(theta).^3.*sin(phi).^2, ...
-                                0,pi,0,2*pi)/(4*pi);                
-        end
-        
-        function g_kappa = hypergeomGrad(a, b, kappa)
-            % M(a, b, kappa)= (gamma(b)/(gamma(b-a)*gamma(a))) ... 
-            %           * integral(@(t) exp(kappa.*t).*t.^(a-1).*(1-t).^(b-a-1),0,1);
-            g_kappa = (gamma(b)/(gamma(b-a)*gamma(a))) ...
-                    * integral(@(t) exp(kappa.*t).*t.^(a).*(1-t).^(b-a-1),0,1);
-        end
-    end%of methods (private)
     %\\
 end%of cylinderBDA class
 

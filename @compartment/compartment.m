@@ -62,6 +62,9 @@ classdef (Abstract) compartment < handle
         addConstraint(obj, str);
         constraintList = getConstraints(obj);
         p = randomInit(obj, seed);
+        
+        % test methods
+        varargout = testJacobian(obj, params, scheme);
     end
     
     methods (Static)

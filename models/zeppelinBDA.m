@@ -68,7 +68,7 @@ classdef zeppelinBDA < compartment
         name = 'tensorBDA';    
         nCompartments = 1;     % number of basic COMPARTMETNT objects 
         nParams = 8;
-        nHyperparams = 2;
+        nHyperparams = 1;
     end
     
     properties (Access = 'protected')
@@ -100,11 +100,11 @@ classdef zeppelinBDA < compartment
             obj.links.addConstraint('kappa2>=kappa1');             
             
             % set hparams and hparams names
-            obj.hyperparams = [50; 50];
-            obj.hyperparamsName = {'nBinsTheta'; 'nBinsPhi'};
+            obj.hyperparams = 1202;
+            obj.hyperparamsName = {'npts'};
         end%of constructor    
         
-        function [sig, out] = synthesize(obj, params, scheme)
+        function [s, tmpAccessMemory] = synthesize(obj, params, scheme)
             % synthesize(params, scheme, hyperparams) return DW-MR signals.
             %       Input arguments:
             %                params: Numerical column vector of all model
@@ -131,46 +131,31 @@ classdef zeppelinBDA < compartment
             kappa2      = params(8);
             
             % read hyper-parameters
-            nBinsTheta = obj.hyperparams(1);
-            nBinsPhi   = obj.hyperparams(2);
+            npts = obj.hyperparams(1);
+           
+            [orientations, weights] = math.sampleSphere('lebedev', npts);            
+            probs = bingham.pdf(...
+                [theta, phi, alpha, 0, kappa1, kappa2]', orientations, weights);
             
-            % get Unit Frame
-            U = math.getUnitFrame(theta, phi, alpha);
-            cB = cylinderBDA.cBingham(-kappa1, -kappa2); % constant for bingmham distribution
-            [probs, thisTheta, thisPhi] = cylinderBDA.discritiseBinghamDistribution(U, nBinsTheta, nBinsPhi, kappa1, kappa2, cB);  
-            
-            % compute cylinder axes for each (theta, phi) [nInstance x 3]
-            n = [cos(thisPhi(:)).*sin(thisTheta(:)),...
-                 sin(thisPhi(:)).*sin(thisTheta(:)),...
-                 cos(thisTheta(:))];
-            
-            ecDiffPar = sum(((diffPar-diffPerp)*(n*U(:,1)).^2 + diffPerp).*probs.*sin(thisTheta(:)), 1);
-            ecDiffPerp1 = sum(((diffPar-diffPerp)*(n*U(:,2)).^2 + diffPerp).*probs.*sin(thisTheta(:)), 1);
-            ecDiffPerp2 = diffPar+ 2*diffPerp - ecDiffPar - ecDiffPerp1;
-
-            % gradient matrix [nScheme x 3] for each measurment
+            % compute signal along each orientation
+            % Z = (diffPar-diffPerp) n*n' + diffPerp I_3x3
+            % s = s0 * exp(-b g'Zg)
+            bval = math.GAMMA^2*(scheme.DELTA-scheme.delta/3).*(scheme.delta.*scheme.G_mag).^2;
             G_dir = [scheme.x, scheme.y, scheme.z];
+            g_dot_n_2 = (G_dir*orientations').^2;
+            sig = exp(-bval.*((diffPar-diffPerp)*g_dot_n_2+diffPerp));
             
-            b = (scheme.DELTA-scheme.delta/3).* ...
-                ((scheme.delta .*scheme.G_mag)*math.GAMMA).^2;
-            
-            s = exp(-b.*(ecDiffPar  *(G_dir*U(:,1)).^2 + ...
-                         ecDiffPerp1*(G_dir*U(:,2)).^2 + ...
-                         ecDiffPerp2*(G_dir*U(:,3)).^2)); 
-            sig = s0 * s;
-            if nargout==2
-                out.s = s;
-                out.ecDiffPar = ecDiffPar;
-                out.ecDiffPerp1 = ecDiffPerp1;
-                out.ecDiffPerp2 = ecDiffPerp2;
-                out.n = n;
-                out.U = U;
-                out.cB = cB;
-                out.probs = probs;
-                out.thisTheta = thisTheta;
-                out.thisPhi = thisPhi;
-                out.b = b;
-                out.G_dir = G_dir;
+            gf_gs0 = sig*probs;
+            s = s0*gf_gs0;
+            if nargout == 2
+                tmpAccessMemory.gf_gs0 = gf_gs0;
+                tmpAccessMemory.sig = sig;
+                tmpAccessMemory.probs = probs;
+                tmpAccessMemory.G_dir = G_dir;
+                tmpAccessMemory.bval = bval;
+                tmpAccessMemory.g_dot_n_2 = g_dot_n_2;
+                tmpAccessMemory.orientations = orientations;
+                tmpAccessMemory.weights = weights;
             end
         end
         
@@ -188,7 +173,7 @@ classdef zeppelinBDA < compartment
             %                   jac: Numerical matrix of size M x nParams.
             %
             
-            [f0, out] = obj.synthesize(params, scheme);  
+            [f0, tmpAccessMemory] = obj.synthesize(params, scheme);  
             
             % read params into individual model parameters
             s0          = params(1);   % b0 signal
@@ -200,145 +185,50 @@ classdef zeppelinBDA < compartment
             kappa1      = params(7);
             kappa2      = params(8);
             
-            % read hyper-parameters
-            nBinsTheta = obj.hyperparams(1);
-            nBinsPhi   = obj.hyperparams(2);
-            
-            % read out parameters
-            gf0_gs0 = out.s;
-            ecDiffPar = out.ecDiffPar;
-            ecDiffPerp1 = out.ecDiffPerp1;
-            ecDiffPerp2 = out.ecDiffPerp2;
-            n = out.n;
-            U = out.U;
-            cB = out.cB;
-            probs = out.probs;
-            thisTheta = out.thisTheta;
-            b = out.b;
-            G_dir = out.G_dir;
+            % read intermediate variables
+            gf_gs0 = tmpAccessMemory.gf_gs0;
+            sig = tmpAccessMemory.sig;
+            probs = tmpAccessMemory.probs;
+            G_dir = tmpAccessMemory.G_dir;
+            bval = tmpAccessMemory.bval;
+            g_dot_n_2 = tmpAccessMemory.g_dot_n_2;
+            orientations = tmpAccessMemory.orientations;
+            weights = tmpAccessMemory.weights;
+                
                 
             % initialise the jac with zeros
             jac = zeros(size(scheme,1), obj.nParams);
                       
             % gradient wrt to s0
-            jac(:,1) = gf0_gs0;
+            jac(:,1) = gf_gs0;
             
-            % gradient wrt dPar
-            gf_gEcDiffPar = (-b.*((G_dir*U(:,1)).^2)).*f0;
+            % gradient wrt diffPar
+            gsig_gdiffPar = (-bval.*g_dot_n_2).*sig;
+            jac(:,2) = s0*gsig_gdiffPar*probs;
             
-            % gradient wrt dPerp1
-            gf_gEcDiffPerp1 = (-b.*((G_dir*U(:,2)).^2)).*f0;
+            % gradient wrt diffPerp
+            gsig_gdiffPerp = (-bval.*(1-g_dot_n_2)).*sig;
+            jac(:,3) = s0*gsig_gdiffPerp*probs;
             
-            % gradient wrt dPerp2
-            gf_gEcDiffPerp2 = (-b.*((G_dir*U(:,3)).^2)).*f0;
-            
-            % gradient of dPar wrt diffPar
-            gEcDiffPar_gDiffPar = sum((n*U(:,1)).^2.*probs.*sin(thisTheta(:)), 1);
-            gEcDiffPerp1_gDiffPar = sum((n*U(:,2)).^2.*probs.*sin(thisTheta(:)), 1);
-            gEcDiffPerp2_gDiffPar = 1 - gEcDiffPar_gDiffPar - gEcDiffPerp1_gDiffPar;
-            
-            jac(:,2) = gf_gEcDiffPar.*gEcDiffPar_gDiffPar + gf_gEcDiffPerp1.*gEcDiffPerp1_gDiffPar + gf_gEcDiffPerp2.*gEcDiffPerp2_gDiffPar;
-            
-            % gradient of dPar wrt diffPerp
-            gEcDiffPar_gDiffPerp = sum((1-(n*U(:,1)).^2).*probs.*sin(thisTheta(:)), 1);
-            gEcDiffPerp1_gDiffPerp = sum((1-(n*U(:,2)).^2).*probs.*sin(thisTheta(:)), 1);
-            gEcDiffPerp2_gDiffPerp = 2 - gEcDiffPar_gDiffPerp - gEcDiffPerp1_gDiffPerp;
-            
-            jac(:,3) = gf_gEcDiffPar.*gEcDiffPar_gDiffPerp + gf_gEcDiffPerp1.*gEcDiffPerp1_gDiffPerp + gf_gEcDiffPerp2.*gEcDiffPerp2_gDiffPerp;
-            
-            % gradient wrt theta, phi, and alpha
-            % using chain rule, comput gf_gV1, gf_gV2, gf_gV3.           
-            gDPar_gU1 = sum(2*(diffPar-diffPerp)*(n*U(:,1)).*n.*probs.*sin(thisTheta(:)), 1);
-            gDPar_gU2 = zeros(1,3);
-            gDPar_gU3 = zeros(1,3);
-            
-            gDPerp1_gU1 = zeros(1,3);
-            gP_gU2 = (-2*kappa1)*probs.*(n*U(:,2)).*n;
-            gP_gU3 = (-2*kappa2)*probs.*(n*U(:,3)).*n;
-            gDPerp1_gU2 = sum(2*(diffPar-diffPerp)*(n*U(:,2)).*n.*probs.*sin(thisTheta(:)), 1) + ...
-                          sum(((diffPar-diffPerp)*(n*U(:,2)).^2 + diffPerp).*sin(thisTheta(:)).*gP_gU2, 1);
-            gDPerp1_gU3 = sum(((diffPar-diffPerp)*(n*U(:,2)).^2 + diffPerp).*sin(thisTheta(:)).*gP_gU3, 1);
-            
-            gDPerp2_gU1 = - gDPar_gU1 - gDPerp1_gU1;
-            gDPerp2_gU2 = - gDPar_gU2 - gDPerp1_gU2;
-            gDPerp2_gU3 = - gDPar_gU3 - gDPerp1_gU3;
-            
-            gf_gU1 = repmat(-2*ecDiffPar*b.*(G_dir*U(:,1)).*f0,1,3).*G_dir   + ...
-                     repmat(gf_gEcDiffPar, 1, 3).*gDPar_gU1          + ...
-                     repmat(gf_gEcDiffPerp1, 1, 3).*gDPerp1_gU1      + ...
-                     repmat(gf_gEcDiffPerp2, 1, 3).*gDPerp2_gU1;
-                 
-            gf_gU2 = repmat(-2*ecDiffPerp1*b.*(G_dir*U(:,2)).*f0,1,3).*G_dir + ...
-                     repmat(gf_gEcDiffPar, 1, 3).*gDPar_gU2          + ...
-                     repmat(gf_gEcDiffPerp1, 1, 3).*gDPerp1_gU2      + ...
-                     repmat(gf_gEcDiffPerp2, 1, 3).*gDPerp2_gU2;
-                 
-            gf_gU3 = repmat(-2*ecDiffPerp2*b.*(G_dir*U(:,3)).*f0,1,3).*G_dir + ...
-                     repmat(gf_gEcDiffPar, 1, 3).*gDPar_gU3          + ...
-                     repmat(gf_gEcDiffPerp1, 1, 3).*gDPerp1_gU3      + ...
-                     repmat(gf_gEcDiffPerp2, 1, 3).*gDPerp2_gU3;
+                        
+            % gradient wrt Bingham distribution parameters
+            gBingham = bingham.jacobian([theta, phi, alpha, 0, kappa1, kappa2]',...
+                orientations, weights);
             
             % gradient wrt theta
-            gU1_gTheta = [ cos(phi)*cos(theta); ...
-                           sin(phi)*cos(theta); ...
-                          -sin(theta)];
-                      
-            gU2_gTheta = [-cos(alpha)*cos(phi)*sin(theta); ...
-                          -cos(alpha)*sin(phi)*sin(theta); ...
-                          -cos(alpha)*cos(theta)];
-                     
-            gU3_gTheta = [ sin(theta)*cos(phi)*sin(alpha);...
-                           sin(theta)*sin(phi)*sin(alpha);...
-                           cos(theta)*sin(alpha)];
-                       
-            jac(:,4) = gf_gU1*gU1_gTheta + gf_gU2*gU2_gTheta + gf_gU3*gU3_gTheta;          
+            jac(:,4) = s0*sig*gBingham(:,1);
             
             % gradient wrt phi
-            gV1_gPhi   = [-sin(phi)*sin(theta); ...
-                           cos(phi)*sin(theta); ...
-                           0];
-                       
-            gV2_gPhi   = [-sin(phi)*cos(alpha)*cos(theta) - cos(phi)*sin(alpha); ...          
-                           cos(phi)*cos(alpha)*cos(theta) - sin(phi)*sin(alpha); ...
-                           0];
-                       
-            gV3_gPhi   = [ sin(phi)*cos(theta)*sin(alpha) - cos(phi)*cos(alpha);...
-                          -cos(phi)*cos(theta)*sin(alpha) - sin(phi)*cos(alpha);...
-                         0];    
-                     
-            jac(:,5) = gf_gU1*gV1_gPhi   + gf_gU2*gV2_gPhi   + gf_gU3*gV3_gPhi;
+            jac(:,5) = s0*sig*gBingham(:,2);
             
-            % gradient wrt alpha
-            % gV1_gAlpha = zeros(3, 1);             
+            % gradient wrt alpah
+            jac(:,6) = s0*sig*gBingham(:,3);
             
-            gV2_gAlpha = [-sin(alpha)*cos(theta)*cos(phi) - cos(alpha)*sin(phi);...
-                          -sin(alpha)*cos(theta)*sin(phi) + cos(alpha)*cos(phi);
-                           sin(alpha)*sin(theta)];                     
-           
-            gV3_gAlpha = [-cos(alpha)*cos(theta)*cos(phi)+sin(alpha)*sin(phi);...
-                          -cos(alpha)*cos(theta)*sin(phi)-sin(alpha)*cos(phi);...
-                           cos(alpha)*sin(theta)];
-           
-            jac(:,6) = gf_gU2*gV2_gAlpha + gf_gU3*gV3_gAlpha;
+            % gradient wrt kappa1
+            jac(:,7) = s0*sig*gBingham(:,5);
             
-            [gcB_gK1, gcB_gK2] = cylinderBDA.cBinghamGrad(-kappa1, -kappa2);
-            
-            gP_gK1      = probs.*(gcB_gK1/cB-(n*U(:,2)).^2);
-            gP_gK2      = probs.*(gcB_gK2/cB-(n*U(:,3)).^2);
-            
-            gDPar_gK1 = sum(((diffPar-diffPerp)*(n*U(:,1)).^2+ diffPerp).*gP_gK1.*sin(thisTheta(:)), 1);
-            gDPerp1_gK1 = sum(((diffPar-diffPerp)*(n*U(:,2)).^2+ diffPerp).*gP_gK1.*sin(thisTheta(:)), 1);
-            gDPerp2_gK1 = - gDPar_gK1 - gDPerp1_gK1;
-            
-            jac(:,7) = gf_gEcDiffPar.*gDPar_gK1 + gf_gEcDiffPerp1.*gDPerp1_gK1 + ...
-                       gf_gEcDiffPerp2.*gDPerp2_gK1;
-            
-            gDPar_gK2 = sum(((diffPar-diffPerp)*(n*U(:,1)).^2+ diffPerp).*gP_gK2.*sin(thisTheta(:)), 1);
-            gDPerp1_gK2 = sum(((diffPar-diffPerp)*(n*U(:,2)).^2+ diffPerp).*gP_gK2.*sin(thisTheta(:)), 1);
-            gDPerp2_gK2 = - gDPar_gK2 - gDPerp1_gK2;
-            
-            jac(:,8) = gf_gEcDiffPar.*gDPar_gK2 + gf_gEcDiffPerp1.*gDPerp1_gK2 + ...
-                       gf_gEcDiffPerp2.*gDPerp2_gK2;       
+            % gradient wrt kappa2
+            jac(:,8) = s0*sig*gBingham(:,6);    
         end % of jacobian
         %\\
     end % of method (public) 

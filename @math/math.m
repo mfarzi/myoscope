@@ -64,6 +64,7 @@ classdef math
         [theta, phi, alpha] = getOrientationAngles(U);
         [gU1, gU2, gU3] = getOrientationJacobian(theta, phi, alpha);
         state = isOrthonormal(U);
+        [pts, weights] = sampleSphere(method, params);
         function rotateAxis(obj)
             % rotateAxis remove the ambiguity in estimation of parameters
             % theta, phi, and alpha by rotating the cooriante system of the

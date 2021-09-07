@@ -34,8 +34,8 @@ nVoxels = size(data, 2);
 % setup the optimizer handle functions
 hparams = obj.getHyperparams();
 fitter = optimizer(); % an "optimizer" object for fitting model parameters
-fitter.setfeval(@(x, s) obj.Feval(x, s, scheme, hparams))
-fitter.setfjac(@(x,~) obj.Fjac(x, scheme, hparams));
+fitter.setfeval(@(x, s) obj.Feval(x, s, scheme))
+fitter.setfjac(@(x,~) obj.Fjac(x, scheme));
 
 % extend data by repeating each column 'nreps' times
 N = nVoxels*nreps;

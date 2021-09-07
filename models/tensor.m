@@ -104,14 +104,14 @@ classdef tensor < compartment
             % compute the orhtonormal basis
             U = math.getUnitFrame(theta, phi, alpha);
             
-            s = exp(-b.*(diffPar  *(G_dir*U(:,1)).^2 + ...
+            gf_gs0 = exp(-b.*(diffPar  *(G_dir*U(:,1)).^2 + ...
                          diffPerp1*(G_dir*U(:,2)).^2 + ...
                          diffPerp2*(G_dir*U(:,3)).^2)); 
             
-            sig = s0*s;
+            sig = s0*gf_gs0;
             
             if nargout==2
-                out.s = s;
+                out.gf_gs0 = gf_gs0;
                 out.U = U;
                 out.G_dir = G_dir;
                 out.b = b;
@@ -142,7 +142,7 @@ classdef tensor < compartment
             alpha       = params(7);   % angele beween v1_zrot and v2
             
             % read out variables
-            gf0_gs0 = out.s;
+            gf_gs0 = out.gf_gs0;
             U = out.U;
             G_dir = out.G_dir;
             b = out.b;
@@ -151,7 +151,7 @@ classdef tensor < compartment
             jac = zeros(size(scheme,1), obj.nParams);
                       
             % gradient wrt to s0
-            jac(:,1) = gf0_gs0;
+            jac(:,1) = gf_gs0;
             
             % gradient wrt diffPar
             gf_gDiffPar = (-b.*((G_dir*U(:,1)).^2)).*f0;

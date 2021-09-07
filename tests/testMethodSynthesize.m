@@ -1,9 +1,10 @@
 clc; clear all; close all;
-files = dir('./data/synthetic/*.mat');
+files = dir('./data/synthetic/zeppelinBDA.mat');
 
 for i=1:length(files)
     load(fullfile(files(i).folder, files(i).name), ...
         'scheme', 'params', 'hparams', 'sig');
+%     hparams = 2030;
     [~,modelName,~] = fileparts(files(i).name);
     model = compartment.str2model(modelName);
     model.setHyperparams(hparams);
