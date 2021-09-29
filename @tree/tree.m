@@ -89,6 +89,27 @@ classdef tree
         
         % METHODS
         
+        function [obj, ID] = insertNode(obj, parent, child, data)
+            % insert a new node between two neighbour nodes
+            
+            nNodes = numel(obj.Parent);
+            assert(child>0 && child<nNodes,...
+                'MATLAB:tree:invalidInputArgument',...
+                'Unknown child node with index %d.', child);
+            assert(obj.Parent(child)==parent,...
+                'MATLAB:tree:invalidInputArgument',...
+                'Parent with index %d has no child with index %d.', parent, child);
+            
+            obj.Node = [obj.Node(1:child-1); data; obj.Node(child:nNodes)];
+            
+            idx = obj.Parent>=child;
+            obj.Parent(idx) = obj.Parent(idx)+1;
+            obj.Parent = [obj.Parent(1:child);child;obj.Parent(child+1:nNodes)]; 
+            
+            ID = child;
+            obj.tag = [obj.tag(1:child-1); num2str(nNodes+1); obj.tag(child:nNodes)];
+        end
+        
         function [obj, ID] = addnode(obj, parent, data)
             %% ADDNODE attach a new node to a parent node
             % 
