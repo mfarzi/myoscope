@@ -1,94 +1,58 @@
-function [scheme, gVec] = read(path2scheme)
-GAMMA = 2.6751525e8; % rad s-1 T-1
-fileID = fopen(path2scheme,'r');
-keepReading = true;
-
-while keepReading
-    thisLine = fgetl(fileID);
-    if isa(thisLine, 'integer') && thisLine == -1
-        keepReading = false;
-    end
-    k = strfind(thisLine,'VERSION: ');
-    if ~isempty(k)
-        schemeType = thisLine(k+9:end);
-        keepReading = false;
-    end
-end
-
-if strcmp(schemeType, 'STEJSKALTANNER')
-    scheme = fscanf(fileID, '%f');
-    scheme = reshape(scheme, [7, length(scheme)/7]);
-    scheme = scheme';
-    scheme = array2table(scheme, 'VariableNames', ...
-        {'x', 'y', 'z', 'G_mag', 'DELTA', 'delta', 'TE'});
+function obj = read(filename)
+    % read is a static method for class SCHEME
+    % 
+    % read(filename) return a SCHEME object.
+    %
+    % Mohsen Farzi
+    % Email: m.farzi@leeds.ac.uk
     
-    nScheme = size(scheme, 1);
+    filename = isValidFilename(filename);
+    assert(isfile(filename), 'MATLAB:scheme:read',...
+        'Filename does not exist.');
     
-    % compute b-vallue 
-    scheme.bval = (scheme.DELTA-scheme.delta/3).*((scheme.delta .*scheme.G_mag)*GAMMA).^2*1e-6;
+    config = readConfig(filename, 'scheme');
     
-    % compute nominal b-value
-    classNo = zeros(nScheme, 1);
-    bvalNominal = scheme.bval(1);
-    classNo(1) = 1;
-    nClass = 1;
-    for n=2:nScheme
-        tolerance = max(10, 0.1*bvalNominal);
-        thisClassNo = find(abs(bvalNominal-scheme.bval(n))<tolerance);
-        if isempty(thisClassNo)
-            nClass = nClass + 1;
-            classNo(n) = nClass;
-            bvalNominal = [bvalNominal; scheme.bval(n)];
-        else
-            classSize = sum(classNo==thisClassNo);
-            bvalNominal(thisClassNo) = (classSize*bvalNominal(thisClassNo)+...
-                                        scheme.bval(n))/(classSize+1);
-            classNo(n) = thisClassNo;
-        end
-    end
-    scheme.bvalNominal = floor(bvalNominal(classNo));
-    
-    % add the direction
-    N = size(scheme, 1);
-    scheme.G_dir = zeros(N, 1);
-    gVec = [];
-    nDir = 0;
-    for n = 1:N
-        thisVec = [scheme.x(n); scheme.y(n); scheme.z(n)];
-        if sum(thisVec)==0 || abs(scheme.bvalNominal(n))<10
-            continue;
-        end
+    if strcmp(config.type{1}, 'bvalue')
+        obj = scheme('bvalue');
+        ghat = reshape(config.ghat{1}, 3, []);
+        bval = config.bval{1};
+        obj.add(ghat', bval);
+    elseif strcmp(config.type{1}, 'stejskal-tanner')
+        obj = scheme('stejskal-tanner');
+        ghat = reshape(config.ghat{1}, 3, []);
+        gmag = config.gmag{1};
         
-        thisVec = thisVec/norm(thisVec);
-        if isempty(gVec)
-            gVec = [gVec; thisVec'];
-            nDir = 1;
-            scheme.G_dir(n) = 1;
-        else
-            angleDiff = acos(gVec*thisVec)*180/pi;
-            % The gradient directions could be flipped; -g and g are the 
-            % same.
-            idx = angleDiff>90;
-            angleDiff(idx) = 180 - angleDiff(idx);
-            [minAngleDiff, k] = min(angleDiff);
-            if minAngleDiff>10
-                gVec = [gVec; thisVec'];
-                nDir = nDir + 1;
-                scheme.G_dir(n) = nDir;
-            else
-                scheme.G_dir(n) = k;
-            end
-        end
-    end 
+        dtList = config.dt{1};
+        dtCode = config.dt{2};
+        dt = dtList(dtCode);
+        
+        deltaList = config.delta{1};
+        deltaCode = config.delta{2};
+        delta = deltaList(deltaCode);
+        
+        teList = config.te{1};
+        teCode = config.te{2};
+        te = teList(teCode);
+            
+        obj.add(ghat', gmag, dt, delta, te);
+    else
+        error('MATLAB:scheme:read',....
+            'Unrecognised scheme type %s.', config.type{1});
+    end
     
-    % consider repetitions
-    % if DELTA, delta, TE, G_dir, and b-values are the same, then these
-    % scans are considered as repeated measurements
+    % optional arguments
+    if isfield(config, 'nominalBvals')
+        obj.setNominalBvals(config.nominalBvals{1});
+        assert(all(obj.bvalCode==config.nominalBvals{2}),...
+            'MATLAB:scheme:inputFormat',...
+            'Inconsistency in the input scheme file: nominalBvals.');
+    end
     
-    % consider different b-values with 10% variation
-    tbl = [scheme.DELTA, scheme.delta, scheme.TE, scheme.G_dir, scheme.bvalNominal];
-    [~,~,ic] = unique(tbl, 'rows');
-    scheme.rep = ic;
-else
-    scheme = [];
+    if isfield(config,'nominalGhat')
+        ghatDic = reshape(config.nominalGhat{1}, 3, []);
+        obj.setNominalDirections(ghatDic');
+        assert(all(obj.ghatCode==config.nominalGhat{2}),...
+            'MATLAB:scheme:inputFormat',...
+            'Inconsistency in the input scheme file: nominalGhat.');
+    end
 end

@@ -1,155 +1,80 @@
-function myoscopeWriteScheme(thisScheme, path2scheme, varargin)
-[schemeType, ns, np, nf, nd, nDirections] = parse_inputs(varargin{:}); 
-
-if isempty(schemeType)
-    % try automatic selection
-    variableList = {'x', 'y', 'z', 'G_mag', 'DELTA', 'delta', 'TE'};
-    isStejskalTanner = all(ismember(variableList,...
-                                    thisScheme.Properties.VariableNames));
-    if isStejskalTanner
-        schemeType = 'STEJSKALTANNER';
-    else
-        error(['The type of the scheme file cannot be automatically ',...
-               'identified.\n']);
-    end
-end
-
-note = sprintf(['#image dimension: ns=%s, np=%s, nf=%s, nd=%s, ', ...
-                'nDirections=%s'], ns, np, nf, nd, nDirections);
-
-fileID = fopen(path2scheme,'w');
-fprintf(fileID, sprintf('#%s scheme.\n', schemeType));
-fprintf(fileID, strcat(note, '\n'));
-
-if strcmp(schemeType, 'STEJSKALTANNER')
-    fprintf(fileID, ['#x         y         z         |G|       DELTA     ',...
-                     'delta     TE       \n']);
-    fprintf(fileID, 'VERSION: STEJSKALTANNER\n');
-    nScheme = size(thisScheme, 1);
-
-    for i=1:nScheme
-        A = [thisScheme.x(i), thisScheme.y(i), thisScheme.z(i),...
-             thisScheme.G_mag(i), thisScheme.DELTA(i), ...
-             thisScheme.delta(i), thisScheme.TE(i)];
-        for j=1:7
-            if j<7 && A(j)<0
-                fprintf(fileID, '%1.5f  ',A(j));
-            elseif j<7 && A(j)>=0
-                fprintf(fileID, ' %1.5f  ', A(j));
-            elseif j==7 && i<nScheme
-                fprintf(fileID, ' %1.5f\n', A(j));
-            else
-                fprintf(fileID, ' %1.5f', A(j));
-            end
-        end
-    end
-end
-
-fclose(fileID);
-end
-
-function [schemeType, ns, np, nf, nd, nDirections] = parse_inputs(varargin)
-pList = {'scheme', 'ns', 'np', 'nf', 'nd', 'nDirections'};
-if nargin > 0 
-    for i = 1:2:nParameters
-        iParameter = find(ismember(pList, varargin{i}));
-        if isempty(iParameter)
-            error(['%s is not a valid parameter.'                   ,...
-                   '"%s", "%s", "%s", and "%s" are only allowed']   ,...
-                   varargin{i}, pList{1} ,pList{2}, pList{3},        ...
-                   pList{4}, pList{5});
-        end
-        
-        switch iParameter
-            case 1
-                schemeType = varargin{i+1};
-                if ~isa(schemeType, 'char')
-                    error('Undefined parameter of type %s for %s\n',...
-                           class(schemeType), pList{1});
-                end
-                
-                if ~strcmp(schemeType, 'STEJSKALTANNER') && ~strcmp(schemeType, 'BVECTOR')
-                    error(['Unknown scheme type %s. Either "BVECTOR" ',...
-                           'or "STEJSKALTANNER" is only supported.\n'],...
-                           schemeType);
-                end
-
-            case 2
-                ns = varargin{i+1};
-                if ~isa(ns, 'double')
-                    error('Undefined parameter of type %s for %s\n',...
-                           class(ns), pList{2});
-                end
-                
-            case 3
-                np = varargin{i+1};
-                if ~isa(np, 'double')
-                    error('Undefined parameter of type %s for %s\n',...
-                           class(np), pList{3});
-                end
-                
-            case 4
-                nf = varargin{i+1};
-                if ~isa(nf, 'double')
-                    error('Undefined parameter of type %s for %s\n',...
-                           class(nf), pList{4});
-                end
-                
-            case 5
-                nd = varargin{i+1};
-                if ~isa(nd, 'double')
-                    error('Undefined parameter of type %s for %s\n',...
-                           class(nd), pList{5});
-                end
-            
-            case 6
-                nDirections = varargin{i+1};
-                if ~isa(nDirections, 'double')
-                    error('Undefined parameter of type %s for %s\n',...
-                           class(nDirections), pList{6});
-                end
+function write(obj, filename, varargin)
+    % write(obj, filename, varargin) is a method for class SCHEME 
     
-            otherwise
-                error(['%s is not a valid parameter.'              ,...
-                   '"%s", "%s", "%s", and "%s" are only allowed']  ,...
-                   varargin{i}, pList{1} ,pList{2}, pList{3},       ...
-                   pList{4}, pList{5}, pList{6});
-        end
-    end
-end
-
-if ~exist('schemeType', 'var')
-    schemeType = [];
-end
-
-
-if exist('ns', 'var')
-    ns = num2str(ns);
-else
-    ns = 'na';
-end
-
-if exist('np', 'var')
-    np = num2str(np);
-else
-    np = 'na';
-end
+    M = obj.measurementsNum('all');
+    assert(M>0, 'MATLAB:scheme:emptyObject',...
+        'The scheme file must have at least one measurement.');
+    
+    % check if filename is valid
+    filename = isValidFilename(filename);
+    fileId = fopen(filename, 'w');
+    
+    % write scheme
+    fprintf(fileId, '##scheme\n');
  
-if exist('nf', 'var')
-    nf = num2str(nf);
-else
-    nf = 'na';
-end
+    fprintf(fileId, '#$type 1 string\n');
+    fprintf(fileId, '%s\n', obj.type);   
+    
+    fprintf(fileId, '#$nMeasurements 1 numeric\n');
+    fprintf(fileId, '%d\n', M);
+    
+    fprintf(fileId, '#$ghat 1 numeric\n');
+    fmt = strcat(repmat('%1.6f ', 1, 3*M-1),' %1.6f\n');
+    fprintf(fileId, fmt, obj.ghat');
+    
+    if strcmp(obj.type, 'bvalue')
+        fprintf(fileId, '#$bval 1 numeric\n');
+        fmt = strcat(repmat('%1.6e ', 1, M-1),' %1.6e\n'); 
+        fprintf(fileId, fmt, obj.bval);
+    else
+        %stejskal-tanner
+        fprintf(fileId, '#$gmag 1 numeric\n');
+        fmt = strcat(repmat('%1.6e ', 1, M-1),' %1.6e\n'); 
+        fprintf(fileId, fmt, obj.gmag);
+        
+        fprintf(fileId, '#$dt 2 numeric\n');
+        N = length(obj.diffusionTimes);
+        fmt = strcat(repmat('%1.6e ', 1, N-1), ' %1.6e\n');
+        fprintf(fileId, fmt, obj.diffusionTimes);
+        fmt = strcat(repmat('%d ', 1, M-1),' %d\n'); 
+        fprintf(fileId, fmt, obj.dtCode);
 
-if exist('nd', 'var')
-    nd = num2str(nd);
-else
-    nd = 'na';
-end
+        fprintf(fileId, '#$delta 2 numeric\n');
+        N = length(obj.gradientDurations);
+        fmt = strcat(repmat('%1.6e ', 1, N-1), ' %1.6e\n');
+        fprintf(fileId, fmt, obj.gradientDurations);
+        fmt = strcat(repmat('%d ', 1, M-1),' %d\n'); 
+        fprintf(fileId, fmt, obj.deltaCode);
 
-if exist('nDirections', 'var')
-    nDirections = num2str(nDirections);
-else
-    nDirections = 'na';
-end
+
+        fprintf(fileId, '#$te 2 numeric\n');
+        N = length(obj.echoTimes);
+        fmt = strcat(repmat('%1.6e ', 1, N-1), ' %1.6e\n');
+        fprintf(fileId, fmt, obj.echoTimes);
+        fmt = strcat(repmat('%d ', 1, M-1),' %d\n'); 
+        fprintf(fileId, fmt, obj.teCode);
+    end%if strcmp(obj.type, 'bvalue')
+    
+    % optional
+    if ~isempty(obj.bvalDic)
+        fprintf(fileId, '#$nominalBvals 2 numeric\n');
+        nShells = size(obj.bvalDic, 1);
+        fmt = strcat(repmat('%1.6e ', 1, nShells-1),' %1.6e\n'); 
+        fprintf(fileId, fmt, obj.bvalDic);
+        fmt = strcat(repmat('%d ', 1, M-1),' %d\n'); 
+        fprintf(fileId, fmt, obj.bvalCode);
+    end
+    
+    % optional
+    if ~isempty(obj.ghatDic)
+        fprintf(fileId, '#$nominalGhat 2 numeric\n');
+        nD = size(obj.ghatDic, 1);
+        fmt = strcat(repmat('%1.6f ', 1, 3*nD-1),' %1.6f\n'); 
+        fprintf(fileId, fmt, obj.ghatDic');
+        fmt = strcat(repmat('%d ', 1, M-1),' %d\n'); 
+        fprintf(fileId, fmt, obj.ghatCode);
+    end
+    %
+    fprintf(fileId, '##ENDscheme\n');
+    fclose(fileId);
 end
