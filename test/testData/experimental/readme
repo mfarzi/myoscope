@@ -1,8 +1,0 @@
-The diffusion data is collected from the dataset
-'s_20161202_01' collected from a mouse 'M00605540'.
-
-Four pixels are selected (x, y, z):
-data_01 at (36,25,41)-Epicardium
-data_02 at (36,25,14)-Myocardium
-data_03 at (36,15,21)-Endocardium
-data_04 at (36,25,24)-Buffer
