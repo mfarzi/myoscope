@@ -73,7 +73,7 @@ classdef zeppelinCBD < compartment
             obj.hyperparamsName = {'npts'};
         end%of constructor    
         
-        function [sig, tmpAccessMemory] = synthesize(obj, params, scheme)
+        function [sig, tmpAccessMemory] = synthesize(obj, params, schemefile)
             % synthesize(params, scheme, hyperparams) return DW-MR signals.
             %       Input arguments:
             %                params: Numerical column vector of all model
@@ -88,6 +88,10 @@ classdef zeppelinCBD < compartment
             validateattributes(params, {'numeric'},...
                 {'column', 'nrows', obj.nParams},...
                 'cylinderBDA.synthesize', 'params');
+            
+            assert(isa(schemefile, 'scheme'), ...
+                'MATLAB:zeppelinCBD:invalidInputArgument',...
+                'Scheme file should be of type scheme.');
 
             % read params into individual model parameters
             s0          = params(1);   % b0 signal
@@ -111,7 +115,7 @@ classdef zeppelinCBD < compartment
             cdt = tensor(); % coupled diffusion tensor
             coupuledTensorParams = [s0, cdtDiffPar, cdtDiffPerp1,...
                 cdtDiffPerp2, theta, phi, alpha]';
-            sig = cdt.synthesize(coupuledTensorParams, scheme);
+            sig = cdt.synthesize(coupuledTensorParams, schemefile);
             
             if nargout==2
                 tmpAccessMemory.cdtDiffPar = cdtDiffPar;
@@ -123,7 +127,7 @@ classdef zeppelinCBD < compartment
             end
         end
         
-        function jac = jacobian(obj, params, scheme)
+        function jac = jacobian(obj, params, schemefile)
             % jacobian(params, scheme, hyperparams) return the gradient of 
             % signal wrt to model parameters.
             %
@@ -137,7 +141,7 @@ classdef zeppelinCBD < compartment
             %                   jac: Numerical matrix of size M x nParams.
             %
             
-            [~, tmpAccessMemory] = obj.synthesize(params, scheme);  
+            [~, tmpAccessMemory] = obj.synthesize(params, schemefile);  
             
             % read params into individual model parameters
             s0          = params(1);   % b0 signal
@@ -161,10 +165,10 @@ classdef zeppelinCBD < compartment
             cdt = tensor(); % Coupled Diffusion Tensor
             coupledTensorParams = [s0, cdtDiffPar, cdtDiffPerp1,...
                 cdtDiffPerp2, theta, phi, alpha]';
-            coupledTensorJac = cdt.jacobian(coupledTensorParams, scheme);
+            coupledTensorJac = cdt.jacobian(coupledTensorParams, schemefile);
             
             % initialise the jac with zeros
-            jac = zeros(size(scheme,1), obj.nParams);
+            jac = zeros(size(schemefile,1), obj.nParams);
                       
             % gradient wrt to s0
             jac(:,1) = coupledTensorJac(:,1);

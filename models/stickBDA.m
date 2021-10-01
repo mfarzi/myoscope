@@ -101,7 +101,7 @@ classdef stickBDA < compartment
             obj.hyperparamsName = {'npts'};
         end%of constructor    
         
-        function [s, tmpAccessMemory] = synthesize(obj, params, scheme)
+        function [s, tmpAccessMemory] = synthesize(obj, params, schemefile)
             % synthesize(params, scheme, hyperparams) return DW-MR signals.
             %       Input arguments:
             %                params: Numerical column vector of all model
@@ -117,6 +117,14 @@ classdef stickBDA < compartment
             validateattributes(params, {'numeric'},...
                 {'column', 'nrows', obj.nParams},...
                 'stickBDA.synthesize', 'params');
+            
+            assert(isa(schemefile, 'scheme'), ...
+                'MATLAB:stickBDA:invalidInputArgument',...
+                'Scheme file should be of type scheme.');
+            
+            assert(strcmp(schemefile.type, 'stejskal-tanner'), ...
+                'MATLAB:stickBDA:invalidInputArgument',...
+                'Scheme file should be of type stejskal-tanner.');
 
             % read params into individual model parameters
             s0          = params(1);   % b0 signal
@@ -135,8 +143,8 @@ classdef stickBDA < compartment
             probs = bingham.pdf(binghamParams, orientations, weights);
                       
             % compute signal along each orientation
-            bval = math.GAMMA^2*(scheme.DELTA-scheme.delta/3).*(scheme.delta.*scheme.G_mag).^2;
-            G_dir = [scheme.x, scheme.y, scheme.z];
+            bval = schemefile.bval;
+            G_dir = schemefile.ghat;
             sig = exp(-diffPar*bval.*(G_dir*orientations').^2);
             
    
@@ -153,7 +161,7 @@ classdef stickBDA < compartment
             end
         end%of synthesize
         
-        function jac = jacobian(obj, params, scheme)
+        function jac = jacobian(obj, params, schemefile)
             % jacobian(params, scheme, hyperparams) return the gradient of 
             % signal wrt to model parameters.
             %
@@ -166,7 +174,7 @@ classdef stickBDA < compartment
             %                   jac: Numerical matrix of size M x nParams.
             %
             
-            [~, tmpAccessMemory] = obj.synthesize(params, scheme);
+            [~, tmpAccessMemory] = obj.synthesize(params, schemefile);
            
              % read params into individual model parameters
             s0          = params(1);   % b0 signal
@@ -188,7 +196,7 @@ classdef stickBDA < compartment
             weights = tmpAccessMemory.weights;
             
             % initialise the jac with zeros
-            jac = zeros(size(scheme,1), obj.nParams);
+            jac = zeros(schemefile.measurementsNum(), obj.nParams);
                       
             % gradient wrt to s0
             jac(:,1) = gf_gs0;

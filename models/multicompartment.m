@@ -165,14 +165,14 @@ classdef multicompartment < compartment
             end
         end % of constructor   
         
-        function [sig, out] = synthesize(obj, params, scheme)
+        function [sig, out] = synthesize(obj, params, schemefile)
             % synthesize is a method for class MULTICOMPARTMENT
             %
             % synthesize(obj, scheme, params, hparams) synthesize DW-MR signal for the 
             % input diffusion scheme by adding the weighted signals from each 
             % compartment: s = s0 *sum_i f_i*s_i
             % 
-            nScheme = size(scheme, 1);
+            nScheme = schemefile.measurementsNum();
             s = zeros(nScheme, 1);
 
             s0 = params(1);
@@ -181,17 +181,17 @@ classdef multicompartment < compartment
                 iEndParams = iStartParams + obj.comp{i}.nParams()-1;
 
                 s = s + obj.comp{i}.synthesize(params(iStartParams:iEndParams),...
-                                               scheme);
+                                               schemefile);
 
                 iStartParams  = iEndParams+1;
             end
             sig = s0*s;
             if nargout==2
-                out.s = s;
+                out.gf_gs0 = s;
             end
         end
 
-        function jac = jacobian(obj, params, scheme)
+        function jac = jacobian(obj, params, schemefile)
             % jacobian is a method for class MULTICOMPARTMENT
             %
             % jacobian(obj,params, scheme, hparams) returns jacobian of synthesized
@@ -206,16 +206,16 @@ classdef multicompartment < compartment
             %                   jac: Numerical matrix of size M x nParams.
             %
 
-            [f0, out] = obj.synthesize(params, scheme);  
+            [~, out] = obj.synthesize(params, schemefile);  
             
             % read intermediate variables
-            gf0_gs0 = out.s;
-
-            % gradient wrt s0
-            jac(:,1) = gf0_gs0;
+            gf_gs0 = out.gf_gs0;
             
-            nScheme = size(scheme, 1);
+            nScheme = schemefile.measurementsNum();
             jac = zeros(nScheme, obj.nParams);
+            
+            % gradient wrt s0
+            jac(:,1) = gf_gs0;
             
             s0  = params(1);
             iStartParams = 2;
@@ -224,7 +224,7 @@ classdef multicompartment < compartment
                 iEndParams = iStartParams + obj.comp{i}.nParams-1;
 
                 gf_gThisComp = obj.comp{i}.jacobian(params(iStartParams:iEndParams),...
-                                                    scheme);
+                                                    schemefile);
                 jac(:,iStartParams:iEndParams) = s0*gf_gThisComp;
 
                 iStartParams = iEndParams + 1;

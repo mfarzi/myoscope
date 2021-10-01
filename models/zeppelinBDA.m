@@ -104,7 +104,7 @@ classdef zeppelinBDA < compartment
             obj.hyperparamsName = {'npts'};
         end%of constructor    
         
-        function [s, tmpAccessMemory] = synthesize(obj, params, scheme)
+        function [s, tmpAccessMemory] = synthesize(obj, params, schemefile)
             % synthesize(params, scheme, hyperparams) return DW-MR signals.
             %       Input arguments:
             %                params: Numerical column vector of all model
@@ -119,6 +119,10 @@ classdef zeppelinBDA < compartment
             validateattributes(params, {'numeric'},...
                 {'column', 'nrows', obj.nParams},...
                 'cylinderBDA.synthesize', 'params');
+            
+            assert(isa(schemefile, 'scheme'), ...
+                'MATLAB:zeppelinBDA:invalidInputArgument',...
+                'Scheme file should be of type scheme.');
 
             % read params into individual model parameters
             s0          = params(1);   % b0 signal
@@ -140,8 +144,8 @@ classdef zeppelinBDA < compartment
             % compute signal along each orientation
             % Z = (diffPar-diffPerp) n*n' + diffPerp I_3x3
             % s = s0 * exp(-b g'Zg)
-            bval = math.GAMMA^2*(scheme.DELTA-scheme.delta/3).*(scheme.delta.*scheme.G_mag).^2;
-            G_dir = [scheme.x, scheme.y, scheme.z];
+            bval = schemefile.bval; 
+            G_dir = schemefile.ghat;
             g_dot_n_2 = (G_dir*orientations').^2;
             sig = exp(-bval.*((diffPar-diffPerp)*g_dot_n_2+diffPerp));
             
@@ -151,15 +155,13 @@ classdef zeppelinBDA < compartment
                 tmpAccessMemory.gf_gs0 = gf_gs0;
                 tmpAccessMemory.sig = sig;
                 tmpAccessMemory.probs = probs;
-                tmpAccessMemory.G_dir = G_dir;
-                tmpAccessMemory.bval = bval;
                 tmpAccessMemory.g_dot_n_2 = g_dot_n_2;
                 tmpAccessMemory.orientations = orientations;
                 tmpAccessMemory.weights = weights;
             end
         end
         
-         function jac = jacobian(obj, params, scheme)
+         function jac = jacobian(obj, params, schemefile)
             % jacobian(params, scheme, hyperparams) return the gradient of 
             % signal wrt to model parameters.
             %
@@ -173,7 +175,7 @@ classdef zeppelinBDA < compartment
             %                   jac: Numerical matrix of size M x nParams.
             %
             
-            [f0, tmpAccessMemory] = obj.synthesize(params, scheme);  
+            [f0, tmpAccessMemory] = obj.synthesize(params, schemefile);  
             
             % read params into individual model parameters
             s0          = params(1);   % b0 signal
@@ -185,19 +187,21 @@ classdef zeppelinBDA < compartment
             kappa1      = params(7);
             kappa2      = params(8);
             
+            % read scheme file
+            bval = schemefile.bval; 
+            G_dir = schemefile.ghat;
+            
             % read intermediate variables
             gf_gs0 = tmpAccessMemory.gf_gs0;
             sig = tmpAccessMemory.sig;
             probs = tmpAccessMemory.probs;
-            G_dir = tmpAccessMemory.G_dir;
-            bval = tmpAccessMemory.bval;
             g_dot_n_2 = tmpAccessMemory.g_dot_n_2;
             orientations = tmpAccessMemory.orientations;
             weights = tmpAccessMemory.weights;
                 
                 
             % initialise the jac with zeros
-            jac = zeros(size(scheme,1), obj.nParams);
+            jac = zeros(schemefile.measurementsNum(), obj.nParams);
                       
             % gradient wrt to s0
             jac(:,1) = gf_gs0;

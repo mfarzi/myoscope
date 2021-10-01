@@ -76,7 +76,7 @@ classdef cylinderBDA < compartment
             obj.hyperparamsName = {'npts'};
         end
         
-        function [s, tmpAccessMemory] = synthesize(obj, params, scheme)
+        function [s, tmpAccessMemory] = synthesize(obj, params, schemefile)
             % synthesize(params, scheme, hyperparams) return DW-MR signals.
             %       Input arguments:
             %                params: Numerical column vector of all model
@@ -92,7 +92,15 @@ classdef cylinderBDA < compartment
             validateattributes(params, {'numeric'},...
                 {'column', 'nrows', obj.nParams},...
                 'cylinderBDA.synthesize', 'params');
-
+            
+            assert(isa(schemefile, 'scheme'), ...
+                'MATLAB:tensor:invalidInputArgument',...
+                'Scheme file should be of type scheme.');
+            
+            assert(strcmp(schemefile.type, 'stejskal-tanner'), ...
+                'MATLAB:tensor:invalidInputArgument',...
+                'Scheme file should be of type stejskal-tanner.');
+            
             % read params into individual model parameters
             s0          = params(1);   % b0 signal
             diffPar     = params(2);   % diffusivity [s/m^2]
@@ -112,8 +120,8 @@ classdef cylinderBDA < compartment
             
             
             % gradient matrix [nScheme x 3] for each measurment
-            G_dir = [scheme.x, scheme.y, scheme.z];
-            G_mag = scheme.G_mag;
+            G_dir = schemefile.ghat; 
+            G_mag = schemefile.gmag;
             
             % comput the gradient along and perpendicular
             % to the cylinder axis [nScheme x nInstance]
@@ -123,12 +131,12 @@ classdef cylinderBDA < compartment
             
             % compute the signal parallel to the cylinder axis
             % [nScheme x nInstance]
-            Lpar = cylinder.get_Lpar(scheme, diffPar);
+            Lpar = cylinder.get_Lpar(schemefile, diffPar);
             sPar = exp(-Lpar.*Gpar_mag2);
             
             % compute the signal perpendicular to the cylinder axis
             % [1 x length(Jp1ROOTS)]
-            [Lperp, nom, denom] = cylinder.get_Lperp(scheme, diffPar, r);
+            [Lperp, nom, denom] = cylinder.get_Lperp(schemefile, diffPar, r);
             sPerp = exp(-Lperp.*Gperp_mag2);
             
             % compute signal as the product of the value along and
@@ -155,7 +163,7 @@ classdef cylinderBDA < compartment
             end
         end
         
-        function jac = jacobian(obj, params, scheme)
+        function jac = jacobian(obj, params, schemefile)
             % jacobian(params, scheme, hyperparams) return the gradient of 
             % signal wrt to model parameters.
             %
@@ -168,7 +176,7 @@ classdef cylinderBDA < compartment
             %                   jac: Numerical matrix of size M x nParams.
             %
             % synthesize signal
-            [~, tmpAccessMemory] = obj.synthesize(params, scheme);
+            [~, tmpAccessMemory] = obj.synthesize(params, schemefile);
             
             % read intermediate variables
             gf0_gs0 = tmpAccessMemory.gf0_gs0;
@@ -192,7 +200,7 @@ classdef cylinderBDA < compartment
             kappa2      = params(8);
             
             % initialise the jac with zeros
-            jac = zeros(size(scheme, 1), obj.nParams);
+            jac = zeros(schemefile.measurementsNum(), obj.nParams);
             
             %%
             % gSgS0 : gradient wrt s0
@@ -201,8 +209,8 @@ classdef cylinderBDA < compartment
             % gradient wrt diffPar
             % first compute gradients for each pair f(theta', phi') and then
             % average over the Bingham distriubtion.
-            gLpar_gDiffPar = cylinder.get_gLpar_gDiff(scheme);
-            gLperp_gDiffPar = cylinder.get_gLperp_gDiff(scheme, diffPar, r, nom, denom);
+            gLpar_gDiffPar = cylinder.get_gLpar_gDiff(schemefile);
+            gLperp_gDiffPar = cylinder.get_gLperp_gDiff(schemefile, diffPar, r, nom, denom);
             
             % gradient wrt diffPar      
             gf_gDiffPar = -(gLpar_gDiffPar.*Gpar_mag2 + gLperp_gDiffPar.*Gperp_mag2).*sig;
@@ -213,7 +221,7 @@ classdef cylinderBDA < compartment
             % gradient wrt r
             % first compute gradients for each pair f(theta', phi') and then
             % average over the Bingham distriubtion.
-            gLperp_gR = cylinder.get_gLperp_gR(scheme, diffPar, r, nom, denom);
+            gLperp_gR = cylinder.get_gLperp_gR(schemefile, diffPar, r, nom, denom);
             gf_gR = -(gLperp_gR.*Gperp_mag2).*sig;
             
             % gSgR

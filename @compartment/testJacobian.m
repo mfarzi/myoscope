@@ -1,10 +1,10 @@
-function varargout = testJacobian(obj, params, scheme)
+function varargout = testJacobian(obj, params, schemefile)
     
     
-    jac_anl = obj.jacobian(params, scheme);
+    jac_anl = obj.jacobian(params, schemefile);
     
     % compute numerical jacobian
-    jac_num = numericalJacobian(obj, params, scheme);
+    jac_num = numericalJacobian(obj, params, schemefile);
 
     
 
@@ -29,7 +29,7 @@ function varargout = testJacobian(obj, params, scheme)
     end
 end % of testjacobian
 
-function jac = numericalJacobian(obj, params, scheme)
+function jac = numericalJacobian(obj, params, schemefile)
     % getJacobian return the gradient of singal wrt to optimisation
     % parameters, i.e. model parameters passed through the linkFun.
 
@@ -39,15 +39,15 @@ function jac = numericalJacobian(obj, params, scheme)
                                 % of numerical derivatives
 
     p0 = params;            % model params
-    f0 = obj.synthesize(p0, scheme);    % signal value
+    f0 = obj.synthesize(p0, schemefile);    % signal value
     
     % initialise the jac with zeros
-    jac = zeros(size(scheme,1), obj.nParams);
+    jac = zeros(schemefile.measurementsNum(), obj.nParams);
     
     for n = 1:obj.nParams
         p1 = p0;
         p1(n) = p0(n) + EPS*p0(n);
-        jac(:,n) = (obj.synthesize(p1, scheme) - f0)/(EPS*p0(n));
+        jac(:,n) = (obj.synthesize(p1, schemefile) - f0)/(EPS*p0(n));
     end
     %\\
 end %of getJacobian

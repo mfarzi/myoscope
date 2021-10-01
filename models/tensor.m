@@ -70,13 +70,13 @@ classdef tensor < compartment
             obj.links = links;
         end
 
-        function [sig, out] = synthesize(obj, params, scheme)
+        function [sig, out] = synthesize(obj, params, schemefile)
             % synthesize(params, scheme, hyperparams) return DW-MR signals
             % from a single diffusion tensor.
             %       Input arguments:
             %                params: Numerical column vector of all model
             %                        parameters
-            %                scheme: Diffusion scheme
+            %            schemefile: A scheme object 
             %
             %      output arguments:
             %                     s: Numerical column vector of synthesied
@@ -87,6 +87,10 @@ classdef tensor < compartment
                 {'column', 'nrows', obj.nParams},...
                 'tensor.synthesize', 'params');
             
+            assert(isa(schemefile, 'scheme'), ...
+                'MATLAB:tensor:invalidInputArgument',...
+                'Scheme file should be of type scheme.');
+            
             % read params into individual model parameters
             s0          = params(1);   % b0 signal
             diffPar     = params(2);   % diffusivity [s/m^2]
@@ -96,29 +100,25 @@ classdef tensor < compartment
             phi         = params(6);   % azimuth angel
             alpha       = params(7);   % angele beween v1_zrot and v2
             
-            G_dir = [scheme.x, scheme.y, scheme.z];
-            
-            b = (scheme.DELTA-scheme.delta/3).* ...
-                ((scheme.delta .*scheme.G_mag)*math.GAMMA).^2;
-            
+            ghat = schemefile.ghat;
+            b = schemefile.bval;
+
             % compute the orhtonormal basis
             U = math.getUnitFrame(theta, phi, alpha);
             
-            gf_gs0 = exp(-b.*(diffPar  *(G_dir*U(:,1)).^2 + ...
-                         diffPerp1*(G_dir*U(:,2)).^2 + ...
-                         diffPerp2*(G_dir*U(:,3)).^2)); 
+            gf_gs0 = exp(-b.*(diffPar  *(ghat*U(:,1)).^2 + ...
+                         diffPerp1*(ghat*U(:,2)).^2 + ...
+                         diffPerp2*(ghat*U(:,3)).^2)); 
             
             sig = s0*gf_gs0;
             
             if nargout==2
                 out.gf_gs0 = gf_gs0;
                 out.U = U;
-                out.G_dir = G_dir;
-                out.b = b;
             end           
         end
         
-        function jac = jacobian(obj, params, scheme)
+        function jac = jacobian(obj, params, schemefile)
             % jacobian(params, scheme, hyperparams) return the gradient of 
             % signal wrt to model parameters.
             %
@@ -130,7 +130,7 @@ classdef tensor < compartment
             %      output arguments:
             %                   jac: Numerical matrix of size M x nParams.
             
-            [f0, out] = obj.synthesize(params, scheme);
+            [f0, out] = obj.synthesize(params, schemefile);
             
             % read params
             s0          = params(1);   % b0 signal
@@ -141,35 +141,37 @@ classdef tensor < compartment
             phi         = params(6);   % azimuth angel
             alpha       = params(7);   % angele beween v1_zrot and v2
             
+            % read scheme file
+            ghat = schemefile.ghat;
+            b = schemefile.bval;
+            
             % read out variables
             gf_gs0 = out.gf_gs0;
             U = out.U;
-            G_dir = out.G_dir;
-            b = out.b;
             
             % initialise the jac with zeros
-            jac = zeros(size(scheme,1), obj.nParams);
+            jac = zeros(schemefile.measurementsNum(), obj.nParams);
                       
             % gradient wrt to s0
             jac(:,1) = gf_gs0;
             
             % gradient wrt diffPar
-            gf_gDiffPar = (-b.*((G_dir*U(:,1)).^2)).*f0;
+            gf_gDiffPar = (-b.*((ghat*U(:,1)).^2)).*f0;
             jac(:,2) = gf_gDiffPar;
             
             % gradient wrt diffPerp1
-            gf_gDiffPerp1 = (-b.*((G_dir*U(:,2)).^2)).*f0;
+            gf_gDiffPerp1 = (-b.*((ghat*U(:,2)).^2)).*f0;
             jac(:,3) = gf_gDiffPerp1;
             
             % gradient wrt diffPerp2
-            gf_gDiffPerp2 = (-b.*((G_dir*U(:,3)).^2)).*f0;
+            gf_gDiffPerp2 = (-b.*((ghat*U(:,3)).^2)).*f0;
             jac(:,4) = gf_gDiffPerp2;
             
             % gradient wrt theta, phi, and alpha
             % using chain rule, comput gf_gV1, gf_gV2, gf_gV3.
-            gf_gV1 = repmat(-2*diffPar*b.*(G_dir*U(:,1)).*f0,1,3).*G_dir;
-            gf_gV2 = repmat(-2*diffPerp1*b.*(G_dir*U(:,2)).*f0,1,3).*G_dir;
-            gf_gV3 = repmat(-2*diffPerp2*b.*(G_dir*U(:,3)).*f0,1,3).*G_dir;
+            gf_gV1 = repmat(-2*diffPar*b.*(ghat*U(:,1)).*f0,1,3).*ghat;
+            gf_gV2 = repmat(-2*diffPerp1*b.*(ghat*U(:,2)).*f0,1,3).*ghat;
+            gf_gV3 = repmat(-2*diffPerp2*b.*(ghat*U(:,3)).*f0,1,3).*ghat;
             
             % compute gradients of V1, V2, and V3 wrt theta, phi, alpha
             [gV1, gV2, gV3] = math.getOrientationJacobian(theta, phi, alpha);

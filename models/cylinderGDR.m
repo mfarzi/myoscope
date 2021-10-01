@@ -67,7 +67,7 @@ classdef cylinderGDR < compartment
             obj.hyperparamsName = {'nBinsR'};
         end
         
-        function s = synthesize(obj, params, scheme)
+        function s = synthesize(obj, params, schemefile)
             % synthesize(params, scheme, hyperparams) return DW-MR signals
             % from a cylinder with Gamma Distributed Radii. The signal 
             % is modeled as the average of the signals from a cylinder with 
@@ -88,6 +88,14 @@ classdef cylinderGDR < compartment
             validateattributes(params, {'double'},...
                 {'column', 'nrows', obj.nParams},...
                 'cylinderGDR.synthesize', 'params');
+            
+            assert(isa(schemefile, 'scheme'), ...
+                'MATLAB:tensor:invalidInputArgument',...
+                'Scheme file should be of type scheme.');
+            
+            assert(strcmp(schemefile.type, 'stejskal-tanner'), ...
+                'MATLAB:tensor:invalidInputArgument',...
+                'Scheme file should be of type stejskal-tanner.');
             
              % read params into individual model parameters
             s0      = params(1);   % b0 signal
@@ -111,14 +119,14 @@ classdef cylinderGDR < compartment
             P(5,:) = phi;
             
             tmpCylinder = cylinder();
-            tmp = arrayfun(@(n) tmpCylinder.synthesize(P(:,n), scheme), 1:nBinsR, 'UniformOutput', false);
+            tmp = arrayfun(@(n) tmpCylinder.synthesize(P(:,n), schemefile), 1:nBinsR, 'UniformOutput', false);
             sig = cell2mat(tmp);
             
             % compute the average wrt R
             s = sig*probs;
         end
         
-        function jac = jacobian(obj, params, scheme)
+        function jac = jacobian(obj, params, schemefile)
             % jacobian(params, scheme, hyperparams) return the gradient of 
             % signal wrt to model parameters.
             %
@@ -137,6 +145,14 @@ classdef cylinderGDR < compartment
             validateattributes(params, {'double'},...
                 {'column', 'nrows', obj.nParams},...
                 'cylinderGDR.jacobian', 'params');
+            
+            assert(isa(schemefile, 'scheme'), ...
+                'MATLAB:cylinderGDR:invalidInputArgument',...
+                'Scheme file should be of type scheme.');
+            
+            assert(strcmp(schemefile.type, 'stejskal-tanner'), ...
+                'MATLAB:cylinderGDR:invalidInputArgument',...
+                'Scheme file should be of type stejskal-tanner.');
             
             % read params into individual model parameters
             s0      = params(1);   % b0 signal
@@ -161,7 +177,7 @@ classdef cylinderGDR < compartment
             P(5,:) = phi;
             
             tmpCylinder = cylinder();
-            [tmp1, tmp2] = arrayfun(@(n) tmpCylinder.jacobian(P(:,n), scheme), 1:nBinsR, 'UniformOutput', false);
+            [tmp1, tmp2] = arrayfun(@(n) tmpCylinder.jacobian(P(:,n), schemefile), 1:nBinsR, 'UniformOutput', false);
             jac_r = cell2mat(tmp1);
             sig = cell2mat(tmp2);
             N = nBinsR*tmpCylinder.nParams;

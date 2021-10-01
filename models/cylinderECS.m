@@ -24,10 +24,11 @@ classdef cylinderECS < compartment
     %                           sectional elliposid plain [radian]
     %
     %   For mathematical background see
-    %       Vangelderen, P., DesPres, D., Vanzijl, P.C.M. and Moonen, C.,
-    %       "Evaluation of restricted diffusion in cylinders.
-    %       Phosphocreatine in rabbit leg muscle.", Journal of Magnetic
-    %       Resonance, Series B, 103(3), pp.255-260, 1994.
+    %   M. Farzi, D. McClymont, H. Whittington, M.C. Zdora, L. Khazin,
+    %   C.A. Lygate, C. Rau,E. Dall?Armellina, I. Teh, and J.E. Schneider,
+    %   "Assessing myocardial microstructure withbiophysical models of
+    %   diffusion MRI," in IEEE Transactions on Medical Imaging,
+    %   July 2021, DOI: 10.1109/TMI.2021.3097907 
     %
     %   See also: multicompartment, cylinder, cylinderGDR, cylinderBDA,
     %             stick
@@ -68,7 +69,7 @@ classdef cylinderECS < compartment
             obj.links.addConstraint('r1>=r2');
         end
         
-        function [sig, out] = synthesize(obj, params, scheme)
+        function [sig, out] = synthesize(obj, params, schemefile)
             % synthesize(params, scheme, hyperparams) return DW-MR signals
             % from a cylinderECS. The signal is modeled as the product of 
             % signals parallel and perpendicular to the cylinder axis.
@@ -87,7 +88,15 @@ classdef cylinderECS < compartment
                 {'column', 'nrows', obj.nParams},...
                 'cylinderECS.synthesize', 'params');
             
-             % read params into individual model parameters
+            assert(isa(schemefile, 'scheme'), ...
+                'MATLAB:tensor:invalidInputArgument',...
+                'Scheme file should be of type scheme.');
+            
+            assert(strcmp(schemefile.type, 'stejskal-tanner'), ...
+                'MATLAB:tensor:invalidInputArgument',...
+                'Scheme file should be of type stejskal-tanner.');
+            
+            % read params into individual model parameters
             s0      = params(1);   % b0 signal
             diffPar = params(2);   % diffusivity [s/m^2]
             r1      = params(3);   % radius along the long axis [m]
@@ -97,64 +106,45 @@ classdef cylinderECS < compartment
             alpha   = params(7);   % plane angle [radian]
             
             
-            G = [scheme.x, scheme.y, scheme.z].*scheme.G_mag;
-            N = math.getUnitFrame(theta, phi, alpha); 
-            n1 = N(:,1); n2 = N(:,2); n3 = N(:,3);
+            G = schemefile.ghat.*schemefile.gmag;
+            U = math.getUnitFrame(theta, phi, alpha); 
             
             % comput the gradient along and perpendicular
             % to the cylinder axis 
-            Gpar_mag2 = (G*n1).^2; 
-            Gperp1_mag2 = (G*n2).^2;
-            Gperp2_mag2 = (G*n3).^2;
+            Gpar_mag2 = (G*U(:,1)).^2; 
+            Gperp1_mag2 = (G*U(:,2)).^2;
+            Gperp2_mag2 = (G*U(:,3)).^2;
             
-            % compute bPar
-            bPar = (scheme.DELTA-scheme.delta/3).*(math.GAMMA*scheme.delta).^2*diffPar;
+            % compute the signal parallel to the cylinder axis
+            Lpar = cylinder.get_Lpar(schemefile, diffPar);
+            Spar = exp(-Lpar.*Gpar_mag2);
             
-            % compute bPerp1
-            beta_r1 = math.Jp1ROOTS/r1;          
-            DB2_r1 = diffPar*beta_r1.^2;
-            nom1 = 2*scheme.delta*DB2_r1' - 2  ...
-                + 2*exp(-scheme.delta*DB2_r1') ...
-                + 2*exp(-scheme.DELTA*DB2_r1') ...
-                - exp(-(scheme.DELTA-scheme.delta)*DB2_r1') ...
-                - exp(-(scheme.DELTA+scheme.delta)*DB2_r1');
-
-            denom1 = diffPar^2*beta_r1.^6.*(math.Jp1ROOTS.^2-1);
             
-            bPerp1 = 2*math.GAMMA^2*nom1*(1./denom1);
+            % compute the signal perpendicular to the cylinder axis
+            % major axis
+            [Lperp1, nom1, denom1] = cylinder.get_Lperp(schemefile, diffPar, r1);
+            Sperp1 = exp(-Lperp1.*Gperp1_mag2);
             
-            % compute bPerp2
-            beta_r2 = math.Jp1ROOTS/r2;          
-            DB2_r2 = diffPar*beta_r2.^2;
-            nom2 = 2*scheme.delta*DB2_r2' - 2  ...
-                + 2*exp(-scheme.delta*DB2_r2') ...
-                + 2*exp(-scheme.DELTA*DB2_r2') ...
-                - exp(-(scheme.DELTA-scheme.delta)*DB2_r2') ...
-                - exp(-(scheme.DELTA+scheme.delta)*DB2_r2');
-
-            denom2 = diffPar^2*beta_r2.^6.*(math.Jp1ROOTS.^2-1);
-            
-            bPerp2 = 2*math.GAMMA^2*nom2*(1./denom2);
-            
+            % compute the signal perpendicular to the cylinder axis
+            % major axis
+            [Lperp2, nom2, denom2] = cylinder.get_Lperp(schemefile, diffPar, r2);
+            Sperp2 = exp(-Lperp2.*Gperp2_mag2);           
             
             % compute signal as the product of the value along and
             % perpendicular to the cylinder axis
-            s = exp(-bPar  .*Gpar_mag2)   .* ...
-                exp(-bPerp1.*Gperp1_mag2) .* ...
-                exp(-bPerp2.*Gperp2_mag2);
-            sig = s0*s;
+            gf_gs0 = Spar.*Sperp1.*Sperp2;
+            sig = s0*gf_gs0;
+            
             if nargout==2
-                out.s = s;
-                out.n1 = n1;
-                out.n2 = n2;
-                out.n3 = n3;
+                out.gf_gs0 = gf_gs0;
+                out.U = U;
                 out.G = G;
                 out.Gpar_mag2 = Gpar_mag2;
                 out.Gperp1_mag2 = Gperp1_mag2;
                 out.Gperp2_mag2 = Gperp2_mag2;
-                out.bPar = bPar;
-                out.bPerp1 = bPerp1;
-                out.bPerp2 = bPerp2;
+                out.Lpar = Lpar;
+                out.Lperp1 = Lperp1;
+                out.Lperp2 = Lperp2;
                 out.nom1 = nom1;
                 out.denom1 = denom1;
                 out.nom2 = nom2;
@@ -162,7 +152,7 @@ classdef cylinderECS < compartment
             end
         end % of synthesize
         
-        function jac = jacobian(obj, params, scheme)
+        function jac = jacobian(obj, params, schemefile)
             % jacobian(params, scheme, hyperparams) return the gradient of 
             % signal wrt to model parameters.
             %
@@ -175,7 +165,7 @@ classdef cylinderECS < compartment
             %                   jac: Numerical matrix of size Mx7.
             % 
             
-            [f0, out] = obj.synthesize(params, scheme, []);
+            [f0, out] = obj.synthesize(params, schemefile);
             
             % read params into individual model parameters
             s0      = params(1);   % b0 signal
@@ -187,178 +177,59 @@ classdef cylinderECS < compartment
             alpha   = params(7);   % plane angle [radian]
             
             % read intermediate variables
-            gf0_gs0 = out.s;
-            n1 = out.n1;
-            n2 = out.n2;
-            n3 = out.n3;
+            gf_gs0 = out.gf_gs0;
+            U = out.U;
             G = out.G;
             Gpar_mag2 = out.Gpar_mag2;
             Gperp1_mag2 = out.Gperp1_mag2;
             Gperp2_mag2 = out.Gperp2_mag2;
-            bPar = out.bPar;
-            bPerp1 = out.bPerp1;
-            bPerp2 = out.bPerp2;
+            Lpar = out.Lpar;
+            Lperp1 = out.Lperp1;
+            Lperp2 = out.Lperp2;
             nom1 = out.nom1;
             denom1 = out.denom1;
             nom2 = out.nom2;
             denom2 = out.denom2;
             
-            
             % initialise the jac with zeros
-            jac = zeros(size(scheme, 1), obj.nParams);
-           
-            
-            % compute bPerp1
-            beta_r1 = math.Jp1ROOTS/r1;          
-            B2_r1 = beta_r1.^2;
-            
-            % compute bPerp2
-            beta_r2 = math.Jp1ROOTS/r2;          
-            B2_r2 = beta_r2.^2;
-            
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            %%%%%%%%%%       Gradient wrt to s0-jac(:,1)        %%%%%%%%%%%
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            jac = zeros(schemefile.measurementsNum(), obj.nParams);
             
             % gradient wrt to s0
-            jac(:,1) = gf0_gs0;
+            jac(:,1) = gf_gs0;
+
+            % gradient wrt diffPar  
+            gLpar_gDiff = cylinder.get_gLpar_gDiff(schemefile);
+            gLperp1_gDiff = cylinder.get_gLperp_gDiff(schemefile, diffPar, r1, nom1, denom1);
+            gLperp2_gDiff = cylinder.get_gLperp_gDiff(schemefile, diffPar, r2, nom2, denom2);    
+            gf_gDiff = -(gLpar_gDiff.*Gpar_mag2 + gLperp1_gDiff.*Gperp1_mag2 + gLperp2_gDiff.*Gperp2_mag2).*f0;
+            jac(:,2) = gf_gDiff;
             
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            %%%%%%%%%%       Gradient wrt to diffPar-jac(:,2)      %%%%%%%%%%%
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            
-            % gbPar_gDiffPar
-            gbPar_gDiffPar = bPar/diffPar;
-            
-            % gbPerp1_gDiffPar
-            gNom1_gDiffPar = 2*scheme.delta*B2_r1' ...
-                        - 2*exp(-diffPar*scheme.delta*B2_r1').*(scheme.delta*B2_r1') ...
-                        - 2*exp(-diffPar*scheme.DELTA*B2_r1').*(scheme.DELTA*B2_r1') ...
-                        +   exp(-diffPar*(scheme.DELTA-scheme.delta)*B2_r1').*((scheme.DELTA-scheme.delta)*B2_r1')...
-                        +   exp(-diffPar*(scheme.DELTA+scheme.delta)*B2_r1').*((scheme.DELTA+scheme.delta)*B2_r1');
-            
-            gDenom1_gDiffPar = 2*diffPar*beta_r1.^6.*(math.Jp1ROOTS.^2-1);
-            tmp = bsxfun(@times, gNom1_gDiffPar, denom1') - bsxfun(@times, nom1, gDenom1_gDiffPar');
-            tmp = bsxfun(@rdivide, tmp, denom1'.^2);
-            gbPerp1_gDiffPar = sum(tmp, 2)*2*math.GAMMA^2;
-     
-            % gbPerp2_gDiffPar
-            gNom2_gDiffPar = 2*scheme.delta*B2_r2' ...
-                        - 2*exp(-diffPar*scheme.delta*B2_r2').*(scheme.delta*B2_r2') ...
-                        - 2*exp(-diffPar*scheme.DELTA*B2_r2').*(scheme.DELTA*B2_r2') ...
-                        +   exp(-diffPar*(scheme.DELTA-scheme.delta)*B2_r2').*((scheme.DELTA-scheme.delta)*B2_r2')...
-                        +   exp(-diffPar*(scheme.DELTA+scheme.delta)*B2_r2').*((scheme.DELTA+scheme.delta)*B2_r2');
-            
-            gDenom2_gDiffPar = 2*diffPar*beta_r2.^6.*(math.Jp1ROOTS.^2-1);
-            tmp = bsxfun(@times, gNom2_gDiffPar, denom2') - bsxfun(@times, nom2, gDenom2_gDiffPar');
-            tmp = bsxfun(@rdivide, tmp, denom2'.^2);
-            gbPerp2_gDiffPar = sum(tmp, 2)*2*math.GAMMA^2;
-            
-            % gradient wrt diffPar       
-            gf_gDiffPar = -(gbPar_gDiffPar.*Gpar_mag2     + ...
-                         gbPerp1_gDiffPar.*Gperp1_mag2 + ...
-                         gbPerp2_gDiffPar.*Gperp2_mag2).*f0;
-            jac(:,2) = gf_gDiffPar;
-            
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            %%%%%%%%%%       Gradient wrt to r1-jac(:,3)        %%%%%%%%%%%
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            % gbPar_gR1 = 0;
-            
-            % gbPerp1_gR1
-            gNom1_gBm = 4*diffPar*scheme.delta*beta_r1' ...
-                      - 2*exp(-diffPar*scheme.delta*B2_r1').*(2*diffPar*scheme.delta*beta_r1') ...
-                      - 2*exp(-diffPar*scheme.DELTA*B2_r1').*(2*diffPar*scheme.DELTA*beta_r1') ...
-                      +   exp(-diffPar*(scheme.DELTA-scheme.delta)*B2_r1').*(2*diffPar*(scheme.DELTA-scheme.delta)*beta_r1') ...
-                      +   exp(-diffPar*(scheme.DELTA+scheme.delta)*B2_r1').*(2*diffPar*(scheme.DELTA+scheme.delta)*beta_r1');
-            
-            gDenom1_gBm = 6*diffPar^2*beta_r1.^5.*(math.Jp1ROOTS.^2-1);
-            
-            tmp = bsxfun(@times, gNom1_gBm, denom1') - bsxfun(@times, nom1, gDenom1_gBm');
-            gbPerp1_gBm = 2*math.GAMMA^2*bsxfun(@rdivide, tmp, denom1'.^2);
-            
-            % gbPerp1_gR1
-            gBm_gR1 = -math.Jp1ROOTS/r1^2;
-            gbPerp1_gR1 = gbPerp1_gBm * gBm_gR1;
-            
-            % gradient wrt R1
-            gf_gR1 = -(gbPerp1_gR1.*Gperp1_mag2).*f0;
+
+            % gradient wrt r1
+            gLperp1_gR1 = cylinder.get_gLperp_gR(schemefile, diffPar, r1, nom1, denom1);
+            gf_gR1 = -(gLperp1_gR1.*Gperp1_mag2).*f0;
             jac(:,3) = gf_gR1;
-            
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            %%%%%%%%%%       Gradient wrt to r2-jac(:,4)        %%%%%%%%%%%
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            
-            % gbPerp2_gR
-            gNom2_gBm = 4*diffPar*scheme.delta*beta_r2' ...
-                      - 2*exp(-diffPar*scheme.delta*B2_r2').*(2*diffPar*scheme.delta*beta_r2') ...
-                      - 2*exp(-diffPar*scheme.DELTA*B2_r2').*(2*diffPar*scheme.DELTA*beta_r2') ...
-                      +   exp(-diffPar*(scheme.DELTA-scheme.delta)*B2_r2').*(2*diffPar*(scheme.DELTA-scheme.delta)*beta_r2') ...
-                      +   exp(-diffPar*(scheme.DELTA+scheme.delta)*B2_r2').*(2*diffPar*(scheme.DELTA+scheme.delta)*beta_r2');
-            
-            gDenom2_gBm = 6*diffPar^2*beta_r2.^5.*(math.Jp1ROOTS.^2-1);
-            
-            tmp = bsxfun(@times, gNom2_gBm, denom2') - bsxfun(@times, nom2, gDenom2_gBm');
-            gbPerp2_gBm = 2*math.GAMMA^2*bsxfun(@rdivide, tmp, denom2'.^2);
-            
-            % gbPerp2_gR2
-            gBm_gR2 = -math.Jp1ROOTS/r2^2;
-            gbPerp2_gR2 = gbPerp2_gBm * gBm_gR2;
-            
-            % gradient wrt R2
-            gf_gR2 = -(gbPerp2_gR2.*Gperp2_mag2).*f0;
+
+            % gradient wrt r2
+            gLperp2_gR2 = cylinder.get_gLperp_gR(schemefile, diffPar, r2, nom2, denom2);
+            gf_gR2 = -(gLperp2_gR2.*Gperp2_mag2).*f0;
             jac(:,4) = gf_gR2;
             
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            %%%%%%%%%%      Gradient wrt to theta-jac(:,5)      %%%%%%%%%%%
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            gf_gN1 = repmat(-2*bPar.*(G*n1).*f0,1,3).*G;
-            gf_gN2 = repmat(-2*bPerp1.*(G*n2).*f0,1,3).*G;
-            gf_gN3 = repmat(-2*bPerp2.*(G*n3).*f0,1,3).*G;
             
-            gN1_gTheta = [ cos(phi)*cos(theta); ...
-                           sin(phi)*cos(theta); ...
-                          -sin(theta)];
-                      
-            gN2_gTheta = [-cos(alpha)*cos(phi)*sin(theta); ...
-                          -cos(alpha)*sin(phi)*sin(theta); ...
-                          -cos(alpha)*cos(theta)];
-                     
-            gN3_gTheta = [ sin(theta)*cos(phi)*sin(alpha);...
-                           sin(theta)*sin(phi)*sin(alpha);...
-                           cos(theta)*sin(alpha)];
-                       
-            jac(:,5) = gf_gN1*gN1_gTheta + gf_gN2*gN2_gTheta + gf_gN3*gN3_gTheta;
             
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            %%%%%%%%%%      Gradient wrt to phi-jac(:,6)         %%%%%%%%%%
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            gN1_gPhi   = [-sin(phi)*sin(theta); ...
-                           cos(phi)*sin(theta); ...
-                           0];
-                       
-            gN2_gPhi   = [-sin(phi)*cos(alpha)*cos(theta) - cos(phi)*sin(alpha); ...          
-                           cos(phi)*cos(alpha)*cos(theta) - sin(phi)*sin(alpha); ...
-                           0];
-                       
-            gN3_gPhi   = [ sin(phi)*cos(theta)*sin(alpha) - cos(phi)*cos(alpha);...
-                          -cos(phi)*cos(theta)*sin(alpha) - sin(phi)*cos(alpha);...
-                         0];    
-                     
-            jac(:,6) = gf_gN1*gN1_gPhi   + gf_gN2*gN2_gPhi   + gf_gN3*gN3_gPhi;
+            % compute gradients of V1, V2, and V3 wrt theta, phi, alpha
+            [gU1, gU2, gU3] = math.getOrientationJacobian(theta, phi, alpha);
+            gf_gU1 = repmat(-2*Lpar.*(G*U(:,1)).*f0,1,3).*G;
+            gf_gU2 = repmat(-2*Lperp1.*(G*U(:,2)).*f0,1,3).*G;
+            gf_gU3 = repmat(-2*Lperp2.*(G*U(:,3)).*f0,1,3).*G;
             
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            %%%%%%%%%%      Gradient wrt to alpha-jac(:,7)       %%%%%%%%%%
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            gN2_gAlpha = [-sin(alpha)*cos(theta)*cos(phi) - cos(alpha)*sin(phi);...
-                          -sin(alpha)*cos(theta)*sin(phi) + cos(alpha)*cos(phi);
-                           sin(alpha)*sin(theta)];                     
-           
-            gN3_gAlpha = [-cos(alpha)*cos(theta)*cos(phi)+sin(alpha)*sin(phi);...
-                          -cos(alpha)*cos(theta)*sin(phi)-sin(alpha)*cos(phi);...
-                           cos(alpha)*sin(theta)];
-           
-            jac(:,7) = gf_gN2*gN2_gAlpha + gf_gN3*gN3_gAlpha;                 
+            % gradient wrt theta
+            jac(:,5) = gf_gU1*gU1(:,1) + gf_gU2*gU2(:,1) + gf_gU3*gU3(:,1);
+            % gradient wrt phi
+            jac(:,6) = gf_gU1*gU1(:,2) + gf_gU2*gU2(:,2) + gf_gU3*gU3(:,2);
+            % gradient wrt alpha
+            jac(:,7) = gf_gU1*gU1(:,3) + gf_gU2*gU2(:,3) + gf_gU3*gU3(:,3);
+                           
         end % of jacobian
     end% of methods (public)
     %\\

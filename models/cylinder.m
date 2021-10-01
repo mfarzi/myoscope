@@ -59,7 +59,7 @@ classdef cylinder < compartment
             obj.links = [s0; diffPar; r; theta; phi];
         end
         
-        function [sig, out] = synthesize(obj, params, scheme)
+        function [sig, out] = synthesize(obj, params, schemefile)
             % synthesize(params, scheme, hyperparams) return DW-MR signals
             % from a cylinder with Gaussian Phase Distribution. The signal 
             % is modeled as the product of the signals parallel and 
@@ -81,6 +81,14 @@ classdef cylinder < compartment
                 {'column', 'nrows', obj.nParams},...
                 'cylinder.synthesize', 'params');
             
+            assert(isa(schemefile, 'scheme'), ...
+                'MATLAB:tensor:invalidInputArgument',...
+                'Scheme file should be of type scheme.');
+            
+            assert(strcmp(schemefile.type, 'stejskal-tanner'), ...
+                'MATLAB:tensor:invalidInputArgument',...
+                'Scheme file should be of type stejskal-tanner.');
+            
             % read params into individual model parameters
             s0      = params(1);   % b0 signal
             diffPar = params(2);   % diffusivity [s/m^2]
@@ -89,7 +97,7 @@ classdef cylinder < compartment
             phi     = params(5);   % azimuth angel
             
             % gradient matrix [nMeasurement x 3] 
-            G = [scheme.x, scheme.y, scheme.z].*scheme.G_mag;
+            G = schemefile.ghat.*schemefile.gmag;
             
             % compute the cylinderal axis
             n = math.get_u1(theta, phi);
@@ -100,11 +108,11 @@ classdef cylinder < compartment
             Gperp_mag2 = sum(G.^2,2)-Gpar_mag2;
             
             % compute the signal parallel to the cylinder axis
-            Lpar = cylinder.get_Lpar(scheme, diffPar);
+            Lpar = cylinder.get_Lpar(schemefile, diffPar);
             Spar = exp(-Lpar.*Gpar_mag2);
 
             % compute the signal perpendicular to the cylinder axis
-            [Lperp, nom, denom] = cylinder.get_Lperp(scheme, diffPar, r);
+            [Lperp, nom, denom] = cylinder.get_Lperp(schemefile, diffPar, r);
             Sperp = exp(-Lperp.*Gperp_mag2);
             
             % compute signal as the product of the value along and
@@ -125,7 +133,7 @@ classdef cylinder < compartment
             end
         end % of synthesize
         
-        function [jac, f0] = jacobian(obj, params, scheme)
+        function [jac, f0] = jacobian(obj, params, schemefile)
             % jacobian(params, scheme, hyperparams) return the gradient of 
             % signal wrt to model parameters.
             %
@@ -139,7 +147,7 @@ classdef cylinder < compartment
             % 
             
             % run synthesize
-            [f0, out] = obj.synthesize(params, scheme, []);
+            [f0, out] = obj.synthesize(params, schemefile);
             
             % read intermediate variables
             gf0_gs0 = out.s;
@@ -160,23 +168,23 @@ classdef cylinder < compartment
             phi     = params(5);   % azimuth angel
             
             % initialise the jac with zeros
-            jac = zeros(size(scheme, 1), obj.nParams);            
+            jac = zeros(schemefile.measurementsNum(), obj.nParams);            
             
             % gradient wrt to s0
             jac(:,1) = gf0_gs0;
             
             % gLpar_gDiff
-            gLpar_gDiff = cylinder.get_gLpar_gDiff(scheme);
+            gLpar_gDiff = cylinder.get_gLpar_gDiff(schemefile);
      
             % gLperp_gDiff
-            gLperp_gDiff = cylinder.get_gLperp_gDiff(scheme, diffPar, r, nom, denom);
+            gLperp_gDiff = cylinder.get_gLperp_gDiff(schemefile, diffPar, r, nom, denom);
             
             % gradient wrt diffPar      
             gf_gDiff = -(gLpar_gDiff.*Gpar_mag2 + gLperp_gDiff.*Gperp_mag2).*f0;
             jac(:,2) = gf_gDiff;
             
             % gLperp_gR
-            gLperp_gR = cylinder.get_gLperp_gR(scheme, diffPar, r, nom, denom);
+            gLperp_gR = cylinder.get_gLperp_gR(schemefile, diffPar, r, nom, denom);
             
             % gradient wrt R
             gf_gR = -(gLperp_gR.*Gperp_mag2).*f0;
@@ -196,24 +204,24 @@ classdef cylinder < compartment
     end%of method (public)
     
     methods (Static)
-        function Lpar = get_Lpar(scheme, diffPar)
+        function Lpar = get_Lpar(schemefile, diffPar)
             %
-            Lpar = (scheme.DELTA-scheme.delta/3).*(math.GAMMA*scheme.delta).^2*diffPar;
+            Lpar = (schemefile.dt-schemefile.delta/3).*(math.GAMMA*schemefile.delta).^2*diffPar;
         end
         
-        function g = get_gLpar_gDiff(scheme)
+        function g = get_gLpar_gDiff(schemefile)
             %
-            g = (scheme.DELTA-scheme.delta/3).*(math.GAMMA*scheme.delta).^2;
+            g = (schemefile.dt-schemefile.delta/3).*(math.GAMMA*schemefile.delta).^2;
         end
         
-        function [Lperp, nom, denom] = get_Lperp(scheme, diffPar, r)
+        function [Lperp, nom, denom] = get_Lperp(schemefile, diffPar, r)
             %
             beta = math.Jp1ROOTS'/r;          
             B2   = beta.^2;
             
             %[nScheme x length(Jp1ROOTS)]
-            diff_dot_delta_dot_beta2 = diffPar*(scheme.delta*B2);
-            diff_dot_DELTA_dot_beta2 = diffPar*(scheme.DELTA*B2);
+            diff_dot_delta_dot_beta2 = diffPar*(schemefile.delta*B2);
+            diff_dot_DELTA_dot_beta2 = diffPar*(schemefile.dt*B2);
             
             nom = 2*diff_dot_delta_dot_beta2 - 2  ...
                 + 2*exp(-diff_dot_delta_dot_beta2) ...
@@ -229,14 +237,14 @@ classdef cylinder < compartment
             %Lperp = 2*math.GAMMA^2*nom*(1./denom)';
         end
         
-        function gLperp_gDiff = get_gLperp_gDiff(scheme, diffPar, r, nom, denom)
+        function gLperp_gDiff = get_gLperp_gDiff(schemefile, diffPar, r, nom, denom)
             %
             beta = math.Jp1ROOTS'/r;          
             B2   = beta.^2;
             
             %[nScheme x length(Jp1ROOTS)]
-            delta_dot_beta2 = scheme.delta*B2;
-            DELTA_dot_beta2 = scheme.DELTA*B2;
+            delta_dot_beta2 = schemefile.delta*B2;
+            DELTA_dot_beta2 = schemefile.dt*B2;
             
             gNom_gDiffPar = 2*delta_dot_beta2 ...
                           - 2*exp(-diffPar*delta_dot_beta2).*delta_dot_beta2 ...
@@ -249,15 +257,15 @@ classdef cylinder < compartment
             gLperp_gDiff = 2*math.GAMMA^2*sum(tmp, 2);
         end
         
-        function gLperp_gR = get_gLperp_gR(scheme, diffPar, r, nom, denom)
+        function gLperp_gR = get_gLperp_gR(schemefile, diffPar, r, nom, denom)
             beta = math.Jp1ROOTS'/r;          
             B2   = beta.^2;
             
             %[nScheme x length(Jp1ROOTS)]
-            delta_dot_beta2 = scheme.delta*B2;
-            delta_dot_beta  = scheme.delta*beta;
-            DELTA_dot_beta2 = scheme.DELTA*B2;
-            DELTA_dot_beta  = scheme.DELTA*beta;
+            delta_dot_beta2 = schemefile.delta*B2;
+            delta_dot_beta  = schemefile.delta*beta;
+            DELTA_dot_beta2 = schemefile.dt*B2;
+            DELTA_dot_beta  = schemefile.dt*beta;
             
             gNom_gBm = 4*diffPar*delta_dot_beta ...
                      - 2*exp(-diffPar*delta_dot_beta2).*(2*diffPar*delta_dot_beta) ...
@@ -275,7 +283,7 @@ classdef cylinder < compartment
             gLperp_gR = gLperp_gBm*gBm_gR;
         end
         
-    end % of methods (protected)
+    end % of methods 
     %\\
 end%of class
 

@@ -49,7 +49,7 @@ classdef ball < compartment
             obj.links = links;
         end
         
-        function s = synthesize(obj, params, scheme)
+        function s = synthesize(obj, params, schemefile)
             % synthesize(params, scheme, hyperparams) return DW-MR signals
             % from a single isotropic diffusion tensor.
             %       Input arguments:
@@ -66,16 +66,19 @@ classdef ball < compartment
                 {'column', 'nrows', obj.nParams},...
                 'ball.synthesize', 'params');
             
+            assert(isa(schemefile, 'scheme'), ...
+                'MATLAB:ball:invalidInputArgument',...
+                'Scheme file should be of type scheme.');
+            
             % read params into individual model parameters
             s0   = params(1);   % b0 signal
             diff = params(2);   % diffusivity [s/m^2]
             
-            b = (scheme.DELTA-scheme.delta/3).* ...
-                ((scheme.delta .*scheme.G_mag)*math.GAMMA).^2;
+            b = schemefile.bval;
             s = s0*exp(-b*diff);
         end % of synthesize
         
-        function jac = jacobian(obj, params, scheme)
+        function jac = jacobian(obj, params, schemefile)
             % jacobian(params, scheme, hyperparams) return the gradient of 
             % signal wrt to model parameters.
             %
@@ -92,22 +95,25 @@ classdef ball < compartment
                 {'column', 'nrows', obj.nParams},...
                 'ball.synthesize', 'params');
             
+            assert(isa(schemefile, 'scheme'), ...
+                'MATLAB:tensor:invalidInputArgument',...
+                'Scheme file should be of type scheme.');
+            
             % read params into individual model parameters
             s0   = params(1);   % b0 signal
             diff = params(2);   % diffusivity [s/m^2]
             
             % initialise the jac with zeros
-            jac = zeros(size(scheme,1), obj.nParams);
+            jac = zeros(schemefile.measurementsNum(), obj.nParams);
             
-            b = (scheme.DELTA-scheme.delta/3).* ...
-                ((scheme.delta .*scheme.G_mag)*math.GAMMA).^2;
-            
-            f0 = s0*exp(-b*diff);
+            b = schemefile.bval;
             
             % gradient wrt s0
-            jac(:,1) = exp(-b*diff);
+            gf_gs0 = exp(-b*diff);
+            jac(:,1) = gf_gs0;
             
             % gradient wrt diff  
+            f0 = s0*gf_gs0;
             gf_gDiff = -b.*f0;
             jac(:,2) = gf_gDiff;
             %\\

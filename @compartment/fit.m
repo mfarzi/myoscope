@@ -1,4 +1,4 @@
-function [params, rmse, exitFlag] = fit(obj, data, scheme, varargin)
+function [params, rmse, exitFlag] = fit(obj, data, schemefile, varargin)
 % fit is a method for class MULTICOMPARTMENT
 %
 % fit(obj, data, scheme) fit parameter models to the obererved data.
@@ -6,7 +6,7 @@ function [params, rmse, exitFlag] = fit(obj, data, scheme, varargin)
 %                   data: A double matrix of MxN. All values must be 
 %                         normalised to the b0-signal. M is the number DW
 %                         measurements and N is the number of voxels.
-%                 scheme: Input diffusion scheme with M rows.
+%             schemefile: A scheme object with M measurements.
 %            Output args:
 %                      p: A double matrix of size PxN. P equals the number
 %                         of model parameters. 
@@ -22,20 +22,20 @@ function [params, rmse, exitFlag] = fit(obj, data, scheme, varargin)
 %
 
 % check consistency between data and scheme file
-assert(size(data, 1)==size(scheme,1),...
+assert(size(data, 1)==schemefile.measurementsNum(),...
     'MATLAB:multicompartment:fit',...
     'Number of rows must be equal in data and scheme.')
 
 % parse input parameters
 [nreps, tfolder, nWorkers, progress] = parseInputVariables(varargin{:});
-nScheme = size(scheme, 1);
+nScheme = schemefile.measurementsNum();%size(schemefile, 1);
 nVoxels = size(data, 2);
 
 % setup the optimizer handle functions
 hparams = obj.getHyperparams();
 fitter = optimizer(); % an "optimizer" object for fitting model parameters
-fitter.setfeval(@(x, s) obj.Feval(x, s, scheme))
-fitter.setfjac(@(x,~) obj.Fjac(x, scheme));
+fitter.setfeval(@(x, s) obj.Feval(x, s, schemefile))
+fitter.setfjac(@(x,~) obj.Fjac(x, schemefile));
 
 % extend data by repeating each column 'nreps' times
 N = nVoxels*nreps;

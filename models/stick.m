@@ -55,13 +55,13 @@ classdef stick < compartment
             % initialise the linking functions to map constrained model
             % parameters to unconstrained optimisation variables.
             s0    = linker('s0'  , 'bounded', 0    , 1);
-            diff  = linker('diff', 'bounded', 1e-10, 3e-9);
+            diffPar  = linker('diffPar', 'bounded', 1e-10, 3e-9);
             theta = linker('theta');
             phi   = linker('phi');
-            obj.links = [s0; diff; theta; phi];
+            obj.links = [s0; diffPar; theta; phi];
         end
         
-        function s = synthesize(obj, params, scheme)
+        function [sig, tmpAccessMemory] = synthesize(obj, params, schemefile)
             % synthesize(params, scheme, hyperparams) return DW-MR signals
             % from a cylinder with r=0. Diffusion is only allowed 
             % along the cylinder axis; no signal attenuation occurs in 
@@ -80,23 +80,33 @@ classdef stick < compartment
                 {'column', 'nrows', obj.nParams},...
                 'stick.synthesize', 'params');
             
+            assert(isa(schemefile, 'scheme'), ...
+                'MATLAB:stick:invalidInputArgument',...
+                'Scheme file should be of type scheme.');
+            
             % read params into individual model parameters
-            s0    = params(1);   % normalised b0 signal
-            diff  = params(2);   % diffusivity [s/m^2]
-            theta = params(3);   % elevation angle [radian]
-            phi   = params(4);   % azimuth angel [radian]
-           
-            % compute the cylinderal axis
-            N = math.getUnitFrame(theta, phi, 0);
-            n = N(:,1);
+            s0       = params(1);   % normalised b0 signal
+            diffPar  = params(2);   % diffusivity [s/m^2]
+            theta    = params(3);   % elevation angle [radian]
+            phi      = params(4);   % azimuth angel [radian]
+            
+            % read scheme file
+            b = schemefile.bval;
+            ghat = schemefile.ghat;
+            
+            % compute the unit frame
+            U = math.getUnitFrame(theta, phi, 0);
 
-            % compute the signal parallel to the cylinder axis
-            bPar = (scheme.DELTA-scheme.delta/3).*(math.GAMMA*scheme.delta).^2*diff;
-            G = [scheme.x, scheme.y, scheme.z].*scheme.G_mag;
-            s = s0*exp(-bPar.*(G*n).^2);
+            % compute the signal parallel to the primary axis
+            gf_gs0 = exp(-b.*(diffPar  *(ghat*U(:,1)).^2));
+            sig = s0*gf_gs0;
+            if nargout==2
+                tmpAccessMemory.gf_gs0 = gf_gs0;
+                tmpAccessMemory.U = U;
+            end
         end
         
-        function jac = jacobian(obj, params, scheme)
+        function jac = jacobian(obj, params, schemefile)
             % jacobian(params, scheme, hyperparams) return the gradient of 
             % signal wrt to model parameters.
             %
@@ -109,50 +119,38 @@ classdef stick < compartment
             %                   jac: Numerical matrix of size M x nParams.
             %
             
-            % validate inputs
-            validateattributes(params, {'double'},...
-                {'column', 'nrows', obj.nParams},...
-                'stick.synthesize', 'params');
+            [f0, out] = obj.synthesize(params, schemefile);
             
             % read params into individual model parameters
-            s0    = params(1);   % normalised b0 signal
-            diff  = params(2);   % diffusivity [s/m^2]
-            theta = params(3);   % elevation angle [radian]
-            phi   = params(4);   % azimuth angel [radian]
+            s0      = params(1);   % normalised b0 signal
+            diffPar = params(2);   % diffusivity [s/m^2]
+            theta   = params(3);   % elevation angle [radian]
+            phi     = params(4);   % azimuth angel [radian]
+            
+            % read scheme file
+            ghat = schemefile.ghat;
+            b = schemefile.bval;
+            
+            % read out variables
+            gf_gs0 = out.gf_gs0;
+            U = out.U;
             
             % initialise the jac with zeros
-            jac = zeros(size(scheme, 1), obj.nParams);
-            
-            % compute the cylinderal axis
-            N = math.getUnitFrame(theta, phi, 0);
-            n = N(:,1);
-            
-            % compute the signal parallel to the cylinder axis
-            bPar = (scheme.DELTA-scheme.delta/3).*(math.GAMMA*scheme.delta).^2;
-            G = [scheme.x, scheme.y, scheme.z].*scheme.G_mag;
-            f0 = s0*exp(-diff*bPar.*(G*n).^2);
-            
+            jac = zeros(schemefile.measurementsNum(), obj.nParams);
             
             % gradient wrt s0
-            jac(:,1) = exp(-diff*bPar.*(G*n).^2);
+            jac(:,1) = gf_gs0;
             
-            % gradient wrt diff 
-            gf_gDiff = (-bPar.*(G*n).^2).*f0;
-            jac(:,2) = gf_gDiff;
+            % gradient wrt diffPar 
+            gf_gDiffPar = (-b.*((ghat*U(:,1)).^2)).*f0;
+            jac(:,2) = gf_gDiffPar;
             
-            % gradient wrt theta
-            gf_gN = repmat(-2*diff*bPar.*(G*n).*f0,1,3).*G;
+            % gradient wrt theta and phi
+            gf_gU1 = repmat(-2*diffPar*b.*(ghat*U(:,1)).*f0,1,3).*ghat;
+            gU1    = math.getOrientationJacobian(theta, phi, 0);
             
-            gN_gTheta = [cos(phi)*cos(theta); ...
-                         sin(phi)*cos(theta); ...
-                        -sin(theta)];
-            jac(:,3) = gf_gN*gN_gTheta;
-            
-            % gradient wrt phi
-            gN_gPhi   = [-sin(phi)*sin(theta); ...
-                          cos(phi)*sin(theta); ...
-                           0];
-            jac(:,4) = gf_gN * gN_gPhi;           
+            jac(:,3) = gf_gU1*gU1(:,1);
+            jac(:,4) = gf_gU1*gU1(:,2);           
         end % of jacobian
 
     end%of methods (public)
