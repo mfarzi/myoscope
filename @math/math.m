@@ -27,7 +27,7 @@ classdef math
     
     properties (Constant=true)
         % the gyromagnetic Ratio (copied from camino source codes)
-        GAMMA = 2.6751525e8; 
+        GAMMA = 2.6751525e8; % rad s-1 T-1
         
         % 60 first roots from the equation J'1(x)=0
         % J'1 is the derivative of the first order bessel function
