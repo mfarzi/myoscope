@@ -105,6 +105,7 @@ classdef scheme < handle
         setNominalDirections(obj, ghat);
         idx = select(obj, str);
         out = get(obj, str);
+        remove(obj, idx);
     end
     
     methods (Static)
