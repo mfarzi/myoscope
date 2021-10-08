@@ -1,2 +1,5 @@
+# ignore hidden system files
+**/.DS_Store
+
 # ignore matlab temp files
 *.m~
