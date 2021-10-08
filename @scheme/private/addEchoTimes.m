@@ -11,6 +11,6 @@ function addEchoTimes(obj, te)
     % remove nan values
     te(isnan(te)) = [];
     
-    obj.echoTimes = union(obj.echoTimes, te, 'stable');
+    obj.teList = union(obj.teList, te, 'stable');
 end
     

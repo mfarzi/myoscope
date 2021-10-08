@@ -8,7 +8,7 @@ classdef scheme < handle
     %       type        - 'stejskal-tanner' or 'bvalue'
     %       ghat        - gradient directions [Mx3] numeric matrix
     %       bval        - diffusion coefficient; b-value [s/m^2]
-    %       gmag        - gradient magnitude
+    %       gmag        - gradient magnitude [T/m]
     %
     %   methods (public):
     %       dt          - return diffusion times [s]  
@@ -36,21 +36,20 @@ classdef scheme < handle
         gmag = [];           % gradient magnitudes [T/m]
         bval = [];           % experimental diffusion coefficient [s/m^2]
         
-        ghatDic = [];
+        dtList = [];         % Difussion times [s]
+        dtCode = [];         % 
+        
+        deltaList = [];      % gradient durations [s]
+        deltaCode = [];
+        
+        teList = [];         % echo times [s]
+        teCode = [];
+        
+        ghatDic = zeros(0,3);
         ghatCode = [];
         
         bvalDic = [];
         bvalCode = [];
-    end
-    
-    properties (Access='private')
-        diffusionTimes = [];
-        gradientDurations = [];
-        echoTimes = [];
-        
-        dtCode = [];
-        deltaCode = [];
-        teCode = [];
     end
         
     
@@ -69,32 +68,64 @@ classdef scheme < handle
             end
         end
         
-        function v = dt(obj)
-            v = obj.diffusionTimes(obj.dtCode);
+        function v = dt(obj, idx)
+            if nargin==1
+                idx = true(obj.measurementsNum, 1);
+            end
+            
+            if strcmp(obj.type, 'bvalue')
+                v = [];
+            else
+                v = obj.dtList(obj.dtCode(idx));
+            end
         end
         
-        function v = delta(obj)
-            v = obj.gradientDurations(obj.deltaCode);
+        function v = delta(obj, idx)
+            if nargin==1
+                idx = true(obj.measurementsNum, 1);
+            end
+            
+            if strcmp(obj.type, 'bvalue')
+                v = [];
+            else
+                v = obj.deltaList(obj.deltaCode(idx));
+            end
         end
         
-        function v = te(obj)
-            v = obj.echoTimes(obj.teCode);
+        function v = te(obj, idx)
+            if nargin==1
+                idx = true(obj.measurementsNum, 1);
+            end
+            
+            if strcmp(obj.type, 'bvalue')
+                v = [];
+            else
+                v = obj.teList(obj.teCode(idx));
+            end
         end
         
-        function g = ghatNominal(obj)
-            assert(~isempty(obj.ghatCode),...
-                'MATLAB:scheme:unsetProperty',...
-                ['Nominal gradient directions are not set yet. Use',...
-                ' "setNominalDirections" method.']);
-            g = obj.ghatDic(obj.ghatCode,:);
+        function g = ghatNominal(obj, idx)
+            if nargin==1
+                idx = true(obj.measurementsNum, 1);
+            end
+            
+            if any(obj.ghatCode==0)
+                g = zeros(0,3);
+            else
+                g = obj.ghatDic(obj.ghatCode(idx),:);
+            end
         end
         
-        function b = bvalNominal(obj)
-            assert(~isempty(obj.bvalCode),...
-                'MATLAB:scheme:unsetProperty',...
-                ['Nominal B-values are not set yet. Use',...
-                ' "setNominalBvals" method.']);
-            b = obj.bvalDic(obj.bvalCode);
+        function b = bvalNominal(obj, idx)
+            if nargin==1
+                idx = true(obj.measurementsNum, 1);
+            end
+            
+            if any(obj.bvalCode==0)
+                b = [];
+            else
+                b = obj.bvalDic(obj.bvalCode(idx));
+            end 
         end
         
         n = measurementsNum(obj,str);
@@ -106,13 +137,16 @@ classdef scheme < handle
         idx = select(obj, str);
         out = get(obj, str);
         remove(obj, idx);
+        newobj = subset(obj, idx);
+        obj = vertcat(obj, schemefile);
     end
     
     methods (Static)
         [obj, gVec] = read(filename);
         [ghatCode, ghatDic] = clusterDirections(ghat, varargin);
         g = normaliseDirections(ghat);
-        b = computeBvalue(gmag, dt, delta)
+        b = computeBvalue(gmag, dt, delta);
+        g = computeGmag(bval, dt, delta);
     end
 end%of class scheme
     

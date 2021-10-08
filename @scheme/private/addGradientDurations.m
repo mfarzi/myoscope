@@ -8,6 +8,6 @@ function addGradientDurations(obj, delta)
         delta = delta';
     end
     
-    obj.gradientDurations = union(obj.gradientDurations, delta, 'stable');
+    obj.deltaList = union(obj.deltaList, delta, 'stable');
 end
     

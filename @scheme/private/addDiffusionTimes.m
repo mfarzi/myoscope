@@ -9,7 +9,7 @@ function addDiffusionTimes(obj, dt)
         dt = dt';
     end
     
-    obj.diffusionTimes = union(obj.diffusionTimes, dt, 'stable');
+    obj.dtList = union(obj.dtList, dt, 'stable');
 end
     
     
