@@ -56,6 +56,7 @@ classdef (Abstract) compartment < handle
         setParamsName(obj,varargin);
         
         writeModel(obj, filename, varargin);
+        writeProcedure(obj, filename, path2data, path2scheme, roi, schemeFilter);
         
         % optimisation methods       
         [params, rmse, exitFlag] = fit(obj, data, scheme, varargin);
@@ -70,5 +71,7 @@ classdef (Abstract) compartment < handle
     methods (Static)
         obj = readModel(filename);
         obj = str2model(modelName);
+        [obj, sig, schemeFile] = readProcedure(filename);
+        [model,params,sig,schemeFile,rmse,flag] = runProcedure(filename);
     end
 end%of class

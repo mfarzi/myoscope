@@ -53,8 +53,7 @@ if progress
     mkdir(wrkdir);
 end
 
-%parfor(n=1:N, nWorkers)
-for n=1:N
+parfor(n=1:N, nWorkers)
     % input signal
     sig = data(:, n);
     % generate initial values for the model parameters

@@ -1,82 +1,72 @@
-function writeParams(obj, filename, params, R, varargin)
-% WRITEPARAMS is a private method for class multicompartment
-%
-%   writeParams store estimted parameters as a text file. 
-%   Inpute:
-%        obj: The multicompartment object
-%   filename: Input filename to store results
-%     params: A matrix of size #params X #voxels
-%          R: An roi object. [optional]
-%             Default: roi(#voxels, 1, 1)
-%   
-%   writeParams(..., <Parameter>, <Value>) allow controling the text format
-%   by passing appropriate parameter-value pairs. 
-%
+function writeParams(obj, filename, params, varargin)
+    % WRITEPARAMS is a public method for class multicompartment
+    %
+    %   writeParams store estimted parameters as a text file. 
+    %   Inpute:
+    %        obj: The multicompartment object
+    %   filename: Input filename to store results
+    %     params: A matrix of size #params X #voxels
+    %          R: An roi object. [optional]
+    %             Default: roi(#voxels, 1, 1)
+    %   
+    %   writeParams(..., <Parameter>, <Value>) allow controling the text format
+    %   by passing appropriate parameter-value pairs. 
+    %
+    
+    
 
-% check inputs
-[precision, mode] = parseInputVariables(varargin{:});
-filename = validateFilename(filename);
-
-% check if roi is provided
-if exist('R', 'var')
-    assert(isa(R, 'roi')&&length(R.index)==size(params,2), ...
-        'MATLAB:multicompartment:writeParams',...
-        'The thrid positional input argument must be an roi object.')
-else
-    R = roi(size(params,2), 1, 1);
-end
-
-%% write parameters
-if strcmp(mode, 'new')
-    if isfile(filename)
-        warning('MATLAB:multicompartment:writeParams',...
-                'Filename is overwritten.\n %s', filename);
+    % parse inputs
+    p = inputParser;
+    p.CaseSensitive = false;
+    p.addOptional('rmse', [], @(v) isPositiveVector(v));
+    p.addOptional('writePermission', 'a', @(v) ischar(v) && ismember(v,{'a', 'w'}));
+    p.addParameter('precision', 10, @(v) isscalar(v)&&isnumeric(v)&&(mod(v,1)==0)&&v>0);
+    p.parse(varargin{:});
+    rmse = p.Results.rmse;
+    writePermission = p.Results.writePermission;
+    precision = p.Results.precision;
+    
+    % check inputs
+    assert(isempty(rmse)||length(rmse)==size(params,2),...
+        'MATLAB:compartment:invalidInputArg',...
+        'rmse and params must have eqaul number of columns.');
+    nD = params(1,1);
+    assert(mod(nD,1)==0 && all(params(1,:)==nD) && nD>0,...
+        'MATLAB:compartment:invalidInputArg',...
+        ['The first row of matrix params must define ',...
+         'the ROI dimension. For example, for 3D images, it must be 3.']);
+    assert(size(params, 1) == obj.getParamsNum()+nD+2,...
+        'MATLAB:compartment:invalidInputArg',...
+        ['Matrix params must have %d rows including ',...
+         'roi information.'], obj.getParamsNum()+nD+2);
+    
+    % check filename is valid
+    filename = isValidFilename(filename);
+    if strcmp(writePermission, 'w')
+        % create new file and overwrite previous file
+        fileId = fopen(filename, 'w');
+    else
+        % append data to the existing file
+        fileId = fopen(filename, 'a');
     end
-    fileId = fopen(filename,'w');
-else
-    fileId = fopen(filename,'a');
-end
 
-% write the opening header 
-fprintf(fileId, '##parameters\n');
-
-% write the column names
-fprintf(fileId, '#$name 1 string\n');
-colNames = ['nrow'; 'ncol'; 'ndep'; 'index'; obj.getParamsName];
-fprintf(fileId, '%s ', colNames{:});
-fprintf(fileId, '\n');
-
-% write parameters for each voxel (one row per voxel)
-nvoxels = size(params, 2);
-fprintf(fileId, '#$value %d numeric\n', nvoxels);
-for i=1:nvoxels
-    fprintf(fileId, '%d %d %d %d', R.nrow, R.ncol, R.ndep, R.index(i));
-    fprintf(fileId, sprintf(' %%1.%de', precision), params(:,i));
-    fprintf(fileId, '\n');
-end
-fprintf(fileId, '##ENDparameters\n');
-fclose(fileId);
-end
-
-function [precision, mode] = parseInputVariables(varargin)
-p = inputParser;
-p.CaseSensitive = false;
-p.addParameter('precision'   , 6, @(v) assert(isnumeric(v)&&rem(v,1)==0));
-p.addParameter('mode', 'new', @(v) assert(ischar(v)&&strcmp(v, 'new')||strcmp(v, 'append')));
-p.parse(varargin{:});
-precision = p.Results.precision;
-mode = p.Results.mode;
-end
-
-function filename = validateFilename(filename)
-[filepath,name,ext] = fileparts(filename);
-if isempty(filepath)
-    filepath = pwd;
-end
-if ~strcmp(ext, '.myo')
-    warning('MATLAB:MYOSCOPE:writeParams',...
-            'The filename extension is changed to ".myo".');
-    ext = '.myo';    
-end
-filename = fullfile(filepath, strcat(name,ext));
+    %% write parameters
+    % write the opening header 
+    fprintf(fileId, '##parameters\n');
+    
+    fprintf(fileId, '#$params %d numeric\n', size(params,2));
+    for i=1:size(params,2)
+        str = myprint(params(:,i), precision);
+        fprintf(fileId, '%s', str);
+    end
+    
+    if ~isempty(rmse)
+        fprintf(fileId, '#$rmse %d numeric\n', size(params, 2));
+        for i=1:size(params,2)
+            str = myprint([params(1:5,i);rmse(i)], precision);
+            fprintf(fileId, '%s', str);
+        end
+    end
+    fprintf(fileId, '##ENDparameters\n\n');
+    fclose(fileId);
 end
