@@ -5,5 +5,6 @@ classdef myo
         config = read(filename, field);
         write(filename, config);
         filename = isValidFilename(filename);
+        print(fileId, v, fmt0);
     end
 end

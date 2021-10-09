@@ -126,6 +126,8 @@ function model = str2compartment(modelName)
             model = zeppelinBDA();
         case 'stickBDA'
             model = stickBDA();
+        case 'zeppelinCBD'
+            model = zeppelinCBD();
         otherwise
             error('model %s is not recognised', modelName);
     end            

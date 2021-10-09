@@ -17,7 +17,7 @@ function writeProcedure(obj, filename, path2data, path2scheme, roi, schemeFilter
     % see also: readProcedure, runProcedure
 
     % parse input arguments
-    filename = isValidFilename(filename);
+    filename = myo.isValidFilename(filename);
     assert(~isfile(filename), 'MATLAB:compartment:invalidInputArgument',...
         'Input filename already exists.');
 
@@ -25,7 +25,7 @@ function writeProcedure(obj, filename, path2data, path2scheme, roi, schemeFilter
     fileId = fopen(filename,'w');
 
     % write headers
-    fprintf(fileId, '##procedure\n');
+    fprintf(fileId, '##filepath\n');
 
     % write data path
     fprintf(fileId, '#$data 1 string\n');
@@ -33,20 +33,17 @@ function writeProcedure(obj, filename, path2data, path2scheme, roi, schemeFilter
 
     % write roi
     fprintf(fileId, '#$roi 1 numeric\n');
-    if isempty(roi)
-        fprintf(fileId, '\n');
-    else
-        roiLen = length(roi);
-        fmt = strcat(repmat('%d ', 1, roiLen-1), ' %d\n');
-        fprintf(fileId, fmt, roi);
-    end
-
+    myo.print(fileId, roi, '%d');
+    
     % write scheme file path
-    fprintf(fileId, '#$scheme 2 string\n');
+    fprintf(fileId, '#$scheme 1 string\n');
     fprintf(fileId, '%s\n', path2scheme);
-    fprintf(fileId, '%s\n', schemeFilter);
+    
+    % write schemfilter
+    fprintf(fileId, '#$filter 1 numeric\n');
+    myo.print(fileId, schemeFilter, '%d');
 
-    fprintf(fileId, '##ENDprocedure\n\n');
+    fprintf(fileId, '##ENDfilepath\n\n');
     fclose(fileId);
     
     % add model config to the filename

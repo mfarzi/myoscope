@@ -48,10 +48,14 @@ classdef pancake < tensor
             % initialise the linking functions to map constrained model
             % parameters to unconstrained optimisation variables.
             links = obj.getLinks();
+            % remove constraints
+            links.removeConstraint('diffPar')
+            links.removeConstraint('diffPerp1');
             % set diffPar = diffPerp1
-            links.addConstraint('diffPar=diffPerp1');
+            links.addConstraint('diffPerp1=diffPar');
+            links.addConstraint('diffPerp2<=diffPar');
             % set alpha = pi/2
-            links.addConstraint('alpha=pi/2');
+%             links.addConstraint('alpha=pi/2');
             obj.links = links;
         end
     end % methods (public)

@@ -70,8 +70,9 @@ classdef (Abstract) compartment < handle
     
     methods (Static)
         obj = readModel(filename);
+        [params, rmse] = readParams(filename);
         obj = str2model(modelName);
         [obj, sig, schemeFile] = readProcedure(filename);
-        [model,params,sig,schemeFile,rmse,flag] = runProcedure(filename);
+        [model, params, rmse, flag, sig, schemeFile] = runProcedure(filename, varargin);
     end
 end%of class

@@ -19,30 +19,38 @@ function writeParams(obj, filename, params, varargin)
     p = inputParser;
     p.CaseSensitive = false;
     p.addOptional('rmse', [], @(v) isPositiveVector(v));
-    p.addOptional('writePermission', 'a', @(v) ischar(v) && ismember(v,{'a', 'w'}));
+    p.addOptional('roi', [], @(v) isvector(v) && all(mod(v,1)==0));
+    p.addParameter('mode', 'a', @(v) ischar(v) && ismember(v,{'a', 'w'}));
     p.addParameter('precision', 10, @(v) isscalar(v)&&isnumeric(v)&&(mod(v,1)==0)&&v>0);
     p.parse(varargin{:});
     rmse = p.Results.rmse;
-    writePermission = p.Results.writePermission;
+    roi = p.Results.roi;
+    writeMode = p.Results.mode;
     precision = p.Results.precision;
     
     % check inputs
     assert(isempty(rmse)||length(rmse)==size(params,2),...
         'MATLAB:compartment:invalidInputArg',...
         'rmse and params must have eqaul number of columns.');
-    nD = params(1,1);
-    assert(mod(nD,1)==0 && all(params(1,:)==nD) && nD>0,...
+    
+    if isempty(roi)
+        nVoxels = size(params, 2);
+        roi = [1 nVoxels 1:nVoxels]';
+    else
+        nD = roi(1);
+        assert(length(roi)==size(params,2)+nD+1,...
         'MATLAB:compartment:invalidInputArg',...
-        ['The first row of matrix params must define ',...
-         'the ROI dimension. For example, for 3D images, it must be 3.']);
-    assert(size(params, 1) == obj.getParamsNum()+nD+2,...
+        'roi and params must have eqaul number of columns.');
+    end
+    
+    assert(size(params, 1) == obj.getParamsNum(),...
         'MATLAB:compartment:invalidInputArg',...
         ['Matrix params must have %d rows including ',...
-         'roi information.'], obj.getParamsNum()+nD+2);
+         'roi information.'], obj.getParamsNum());
     
     % check filename is valid
-    filename = isValidFilename(filename);
-    if strcmp(writePermission, 'w')
+    filename = myo.isValidFilename(filename);
+    if strcmp(writeMode, 'w')
         % create new file and overwrite previous file
         fileId = fopen(filename, 'w');
     else
@@ -55,16 +63,16 @@ function writeParams(obj, filename, params, varargin)
     fprintf(fileId, '##parameters\n');
     
     fprintf(fileId, '#$params %d numeric\n', size(params,2));
+    fmt = append('%.', num2str(precision), 'g');
+    nD = roi(1);
     for i=1:size(params,2)
-        str = myprint(params(:,i), precision);
-        fprintf(fileId, '%s', str);
+        myo.print(fileId, [roi(1:nD+1); roi(i+nD+1); params(:,i)], fmt);
     end
     
     if ~isempty(rmse)
         fprintf(fileId, '#$rmse %d numeric\n', size(params, 2));
         for i=1:size(params,2)
-            str = myprint([params(1:5,i);rmse(i)], precision);
-            fprintf(fileId, '%s', str);
+            myo.print(fileId, [roi(1:nD+1); roi(i+nD+1); rmse(i)], fmt);
         end
     end
     fprintf(fileId, '##ENDparameters\n\n');

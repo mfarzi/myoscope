@@ -1,4 +1,4 @@
-function [model, params, sig, schemeFile, rmse, flag] = runProcedure(filename)
+function [model, params, rmse, flag, sig, schemeFile] = runProcedure(filename, varargin)
     % runProcedure is a static method for the abstract class COMPARTMENT
     % 
     % runProcedure(filename) return the compartmen model, fitted
@@ -20,6 +20,12 @@ function [model, params, sig, schemeFile, rmse, flag] = runProcedure(filename)
     
     [model, sig, schemeFile] = compartment.readProcedure(filename);
     
-    [params, rmse, flag] = model.fit(sig, schemeFile);
-    model.writeParams(filename, params, rmse, flag);
+    nD = sig(1,1);
+    roi = [nD; sig(2:nD+1,1); sig(nD+2,:)'];
+    
+    sig = sig(nD+3:end, :);
+    
+    [params, rmse, flag] = model.fit(sig, schemeFile, varargin{:});
+    
+    model.writeParams(filename, params, rmse, roi);
 end
