@@ -84,52 +84,84 @@ function config = parseConstraint(obj, str)
 %         return;
 %     end
     
-    % parse the right-hand expression
-    varInput = strjoin(cellfun(@(c) strcat('(',c,')?'), varNames, 'UniformOutput', false),'');
-    numInput = strcat('(pi)|(\d*(\.)?\d*(e-)?(e+)?(e)?\d*)');
-    format = strcat(numInput, varInput);
-    [match, nomatch] = regexp(str, format, 'match', 'split');
-    matchLen = length(match);
-    isBasicOperator = ismember(nomatch(2:matchLen),{'-', '+', '*', '/'});
-    assert(all(isBasicOperator)&&isempty(nomatch{matchLen+1}),...
-        'MATLAB:linker:parseConstraint', ...
-        'Unknown format.');
+    %% parse the right-hand expression
+    % include a dummy zero if str starts with + or -
+    if strcmp(str(1), '+') || strcmp(str(1), '-')
+        str = append('0', str);
+    end
+    % split the construction into additive or substractive expressions
+    [operators, expressions] = regexp(str, '(?<![\d*]e)+|(?<![\d*]e)-',...
+                                      'match', 'split');
     
-    % define rhv
-    isVariable = cellfun(@(c) whichVar(c, varNames), match);
-    rhv = isVariable(isVariable>0);
-    assert(length(unique(rhv))==length(rhv),...
-        'MATLAB:linker:parseConstraint',...
-        'Each variable must be used once in each constraint.');
-    config.rhv = rhv;
-    
-    % define constraint str
-    tmp = match; tmp(isVariable>0) = {'%s'};
-    config.str = strcat('%s', config.type, nomatch{1}, ...
-        strjoin(tmp, nomatch(2:matchLen)));
-    
-    % define function handle
-    tmp = match;
-    for n=1:matchLen
-        if isVariable(n)>0
-            tmp{n} = sprintf('P(%d)', find(rhv==isVariable(n)));
+    rhv = [];
+    str_expr = '';
+    str_fh = '';
+    str_gh = '';
+    nOperators = length(operators);
+    for i=1:length(expressions)
+        [rhv, str_expr, str_fh, str_gh] = ...
+            readExpression(expressions{i}, varNames, rhv, str_expr, str_fh, str_gh);
+        if i<=nOperators
+            str_expr = append(str_expr,operators{i});
+            str_fh   = append(str_fh  ,operators{i});
+            str_gh   = append(str_gh  ,operators{i});
         end
     end
-    config.fh = str2func(strcat('@(P)',nomatch{1},...
-        strjoin(tmp, nomatch(2:matchLen))));
     
-    % define gradient handle
-    tmpMatch = match(isVariable>0);
-    tmpNomatch = nomatch(isVariable>0);
-    tmpStr = '';
-    for n=1:length(tmpMatch)
-        tmpStr = strcat(tmpStr, tmpNomatch{n}, sprintf('jac(%d,:)', n));
-    end
-    if isempty(tmpStr)
-        config.gh = @(~,~) [];
-    else
-        config.gh = str2func(strcat('@(jac,~)',tmpStr));
-    end
+    % define dependent variables
+    config.rhv = rhv;
+    % define constraint str
+    config.str = append('%s', config.type, str_expr);
+    % function handle 
+    config.fh = str2func(append('@(P)',str_fh));
+    % function handle to gradient
+    config.gh = str2func(append('@(jac,P)',str_gh));
+    
+%     varInput = strjoin(cellfun(@(c) strcat('(',c,')?'), varNames, 'UniformOutput', false),'');
+%     numInput = strcat('(pi)|(\d*(\.)?\d*(e-)?(e+)?(e)?\d*)');
+%     format = strcat(numInput, varInput);
+%     [match, nomatch] = regexp(str, format, 'match', 'split');
+%     matchLen = length(match);
+%     isBasicOperator = ismember(nomatch(2:matchLen),{'-', '+', '*', '/'});
+%     assert(all(isBasicOperator)&&isempty(nomatch{matchLen+1}),...
+%         'MATLAB:linker:parseConstraint', ...
+%         'Unknown format.');
+    
+    % define rhv
+%     isVariable = cellfun(@(c) whichVar(c, varNames), match);
+%     rhv = isVariable(isVariable>0);
+%     assert(length(unique(rhv))==length(rhv),...
+%         'MATLAB:linker:parseConstraint',...
+%         'Each variable must be used once in each constraint.');
+%     config.rhv = rhv;
+    
+    % define constraint str
+%     tmp = match; tmp(isVariable>0) = {'%s'};
+%     config.str = strcat('%s', config.type, nomatch{1}, ...
+%         strjoin(tmp, nomatch(2:matchLen)));
+    
+    % define function handle
+%     tmp = match;
+%     for n=1:matchLen
+%         if isVariable(n)>0
+%             tmp{n} = sprintf('P(%d)', find(rhv==isVariable(n)));
+%         end
+%     end
+%     config.fh = str2func(strcat('@(P)',nomatch{1},...
+%         strjoin(tmp, nomatch(2:matchLen))));
+%     
+%     % define gradient handle
+%     tmpMatch = match(isVariable>0);
+%     tmpNomatch = nomatch(isVariable>0);
+%     tmpStr = '';
+%     for n=1:length(tmpMatch)
+%         tmpStr = strcat(tmpStr, tmpNomatch{n}, sprintf('jac(%d,:)', n));
+%     end
+%     if isempty(tmpStr)
+%         config.gh = @(~,~) [];
+%     else
+%         config.gh = str2func(strcat('@(jac,~)',tmpStr));
+%     end
 end
 
 function i = whichVar(thisVar, varNames)
@@ -137,4 +169,82 @@ function i = whichVar(thisVar, varNames)
     if isempty(i)
         i = 0;
     end
+end
+
+function [rhv, str_expr, str_fh, str_gh] = readExpression(str, varNames, rhv, str_expr, str_fh, str_gh)
+    % internal function to read expressions
+    % input experssion must be of types below:
+    %       1) numeric input
+    %       2) single parameters
+    %       3) multiplication of a parameter by a numeric value
+    %       4) multiplication a parameer by another one
+    %       5) multiplication two paramters and a number
+    
+    [operators, expressions] = regexp(str, '*', 'match', 'split');
+    nOperators = length(operators);
+    
+    switch nOperators
+        case 0
+            % this is single input or parameter
+            varId = whichVar(expressions{1}, varNames);
+            isNumber = ~isempty(str2num(expressions{1}));
+            if varId>0
+                rhv = [rhv, varId];
+                n = length(rhv);
+                str_expr = append(str_expr, '%s');
+                str_fh = append(str_fh, sprintf('P(%d)', n));
+                str_gh = append(str_gh, sprintf('jac(%d,:)', n));
+            elseif isNumber
+                str_expr = append(str_expr, expressions{1});
+                str_fh = append(str_fh, expressions{1});
+                str_gh = append(str_gh, '0');
+            else
+                error('MATLAB:linker:invalidInput',...
+                'Uknown input constraint format:%s.', str);
+            end
+        case 1
+            % two expressions: the first one could be either a number or
+            % parameterthe but the second one must be a parameter 
+            % 
+            varId1 = whichVar(expressions{1}, varNames);
+            isNumber = ~isempty(str2num(expressions{1}));
+            varId2 = whichVar(expressions{2}, varNames);
+            assert(varId2>0, 'MATLAB:linker:invalidInput',...
+                'Uknown input constraint format:%s.', str);
+            if varId1>0
+                rhv = [rhv, varId1, varId2];
+                n = length(rhv);
+                str_expr = append(str_expr, '%s*%s');
+                str_fh = append(str_fh, sprintf('P(%d)*P(%d)', n-1, n));
+                str_gh = append(str_gh, sprintf('P(%d)*jac(%d,:)+P(%d)*jac(%d,:)', n-1,n,n,n-1));
+            elseif isNumber
+                rhv = [rhv, varId2];
+                n = length(rhv);
+                str_expr = append(str_expr, expressions{1},'*%s');
+                str_fh = append(str_fh, expressions{1}, sprintf('*P(%d)', n));
+                str_gh = append(str_gh, expressions{1}, sprintf('*jac(%d,:)', n));
+            else
+                error('MATLAB:linker:invalidInput',...
+                'Uknown input constraint format:%s.', str);
+            end
+        case 2
+            % three expressions: the first one must be a number and the
+            % second and the third ones must be parameters
+            isNumber = ~isempty(str2num(expressions{1}));
+            varId1 = whichVar(expressions{2}, varNames);
+            varId2 = whichVar(expressions{3}, varNames);
+            assert(varId1>0 && varId2>0 && isNumber,...
+                'MATLAB:linker:invalidInput',...
+                'Uknown input constraint format:%s.', str);  
+            rhv = [rhv, varId1, varId2];
+            n = length(rhv);
+            str_expr = append(str_expr, expressions{1}, '*%s*%s');
+            str_fh = append(str_fh, expressions{1}, sprintf('*P(%d)*P(%d)', n-1, n));
+            str_gh = append(str_gh, ...
+                expressions{1}, sprintf('*P(%d)*jac(%d,:)+', n-1,n),...
+                expressions{1}, sprintf('*P(%d)*jac(%d,:)', n, n-1));
+        otherwise
+            error('MATLAB:linker:invalidInput',...
+                'Uknown input constraint format:%s.', str);
+    end    
 end
