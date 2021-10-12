@@ -34,7 +34,7 @@ classdef zeppelinCBD < compartment
     % Email: m.farzi@leeds.ac.uk
     
     properties (SetAccess='protected')
-        name = 'tensorCBD';    
+        name = 'zeppelinCBD';    
         nCompartments = 1;     % number of basic COMPARTMETNT objects 
         nParams = 8;
         nHyperparams = 1;
@@ -168,7 +168,7 @@ classdef zeppelinCBD < compartment
             coupledTensorJac = cdt.jacobian(coupledTensorParams, schemefile);
             
             % initialise the jac with zeros
-            jac = zeros(size(schemefile,1), obj.nParams);
+            jac = zeros(schemefile.measurementsNum(), obj.nParams);
                       
             % gradient wrt to s0
             jac(:,1) = coupledTensorJac(:,1);
