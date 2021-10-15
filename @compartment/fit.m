@@ -53,26 +53,51 @@ if progress
     mkdir(wrkdir);
 end
 
-parfor(n=1:N, nWorkers)
-    % input signal
-    sig = data(:, n);
-    % generate initial values for the model parameters
-    x0 = obj.links.initx();
-    % fit model to sig
-    [x, cost, flag] = fitter.run(x0, sig);
-    p = obj.links.map(x);
-    err = sqrt(cost/nScheme);
-    % store results
-    params(:,n) = p;
-    rmse(n) = err;
-    exitFlag(n) = flag;
-    % print results
-    if progress
-        fileId = fopen(fullfile(wrkdir, sprintf('%d.myo', n)),'w');
-        fprintf(fileId, '%1.6e\n', [flag; err; p]);
-        fclose(fileId);
-    end
-end%of parfor
+if nWorkers==0 || N==1
+    % run in serial
+    for n=1:N
+        % input signal
+        sig = data(:, n);
+        % generate initial values for the model parameters
+        x0 = obj.links.initx();
+        % fit model to sig
+        [x, cost, flag] = fitter.run(x0, sig);
+        p = obj.links.map(x);
+        err = sqrt(cost/nScheme);
+        % store results
+        params(:,n) = p;
+        rmse(n) = err;
+        exitFlag(n) = flag;
+        % print results
+        if progress
+            fileId = fopen(fullfile(wrkdir, sprintf('%d.myo', n)),'w');
+            fprintf(fileId, '%1.6e\n', [flag; err; p]);
+            fclose(fileId);
+        end
+    end%of for
+else
+    % run in parallel mode
+    parfor(n=1:N, nWorkers)
+        % input signal
+        sig = data(:, n);
+        % generate initial values for the model parameters
+        x0 = obj.links.initx();
+        % fit model to sig
+        [x, cost, flag] = fitter.run(x0, sig);
+        p = obj.links.map(x);
+        err = sqrt(cost/nScheme);
+        % store results
+        params(:,n) = p;
+        rmse(n) = err;
+        exitFlag(n) = flag;
+        % print results
+        if progress
+            fileId = fopen(fullfile(wrkdir, sprintf('%d.myo', n)),'w');
+            fprintf(fileId, '%1.6e\n', [flag; err; p]);
+            fclose(fileId);
+        end
+    end%of parfor
+end
 
 % select the min rmse per repetitions
 if nreps>1
