@@ -129,7 +129,7 @@ classdef scheme < handle
         end
         
         n = measurementsNum(obj,str);
-        write(obj, filename);
+        write(obj, filename, varargin);
         tbl = exportAsTable(obj);
         add(obj, varargin);
         setNominalBvals(obj, b);

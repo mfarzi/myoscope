@@ -4,11 +4,11 @@ function write(obj, filename, varargin)
     % parse inputs
     p = inputParser;
     p.CaseSensitive = false;
-    p.addOptional('writePermission', 'w', @(v) ischar(v) && ismember(v,{'a', 'w'}));
+    p.addOptional('mode', 'w', @(v) ischar(v) && ismember(v,{'a', 'w'}));
     p.addParameter('precision', 10, @(v) isscalar(v)&&isnumeric(v)&&(mod(v,1)==0)&&v>0);
     p.parse(varargin{:});
     
-    writePermission = p.Results.writePermission;
+    writePermission = p.Results.mode;
     precision = p.Results.precision;
     
     M = obj.measurementsNum('all');
