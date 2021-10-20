@@ -3,8 +3,10 @@ classdef myo
     
     methods (Static)
         config = read(filename, field);
-        write(filename, config);
+        write(fielId, fieldname, v);
         filename = isValidFilename(filename);
         print(fileId, v, fmt0);
+        writeData(filename, sig, varargin);
+        [sig, schemefile, roi] = readData(filename);
     end
 end
