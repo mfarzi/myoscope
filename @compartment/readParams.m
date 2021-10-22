@@ -8,5 +8,9 @@ function [params, rmse] = readParams(filename)
     
     config = myo.read(filename, 'parameters');
     params = cell2mat(config.params');
-    rmse = cell2mat(config.rmse');
+    if isfield(config, 'rmse')
+        rmse = cell2mat(config.rmse');
+    else
+        rmse = [];
+    end
 end%of readParams

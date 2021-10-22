@@ -19,7 +19,7 @@ function writeData(filename, sig, varargin)
     p = inputParser;
     p.CaseSensitive = false;
     p.addOptional('schemefile', [], @(v) isa(v, 'scheme'));
-    p.addOptional('roi', [], @(v) isvector(v) && all(mod(v,1)==0));
+    p.addOptional('roi', [], @(v) isvector(v) && isnumeric(v) && all(mod(v,1)==0));
     p.addParameter('mode', 'a', @(v) ischar(v) && ismember(v,{'a', 'w'}));
     p.addParameter('precision', 10, @(v) isscalar(v)&&isnumeric(v)&&(mod(v,1)==0)&&v>0);
     p.parse(varargin{:});
