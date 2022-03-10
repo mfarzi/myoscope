@@ -1,4 +1,4 @@
-function F = Feval(obj, x, data, scheme)
+function F = Feval(obj, x, data, schemefile)
 % Feval is a method for class MULTICOMPARTMENT
 %
 % Feval(obj, x, varargin) returns the difference between synthesized DW-MR
@@ -6,6 +6,6 @@ function F = Feval(obj, x, data, scheme)
 % f[m] = s_m - d_m
 
 params = obj.links.map(x);
-s = obj.synthesize(params, scheme);
+s = obj.synthesize(params, schemefile);
 F = s - data;
 end

@@ -148,8 +148,8 @@ classdef optimizer < handle
             
             if strcmp(obj.algorithm, 'conjugate-gradient')
                 options = obj.getOptions();
-                fval = @(x) sum(obj.feval(x, varargin{:}).^2);
-                gval = @(x) 2*obj.fjac(x, varargin{:})'*obj.feval(x, varargin{:});
+                fval = @(x) obj.feval(x,varargin{:});%sum(obj.feval(x, varargin{:}).^2);
+                gval = @(x) obj.fjac(x,varargin{:});%2*obj.fjac(x, varargin{:})'*obj.feval(x, varargin{:});
                 [x, cost, exitFlag, output] = conjugateGradient(fval, gval, x0, options);
             elseif strcmp(obj.algorithm, 'levenberg-marquardt')
                 options = obj.getOptions();
@@ -157,19 +157,21 @@ classdef optimizer < handle
                 [x, cost, ~, exitFlag, output] = lsqnonlin(objective, x0, [], [], options);
             elseif strcmp(obj.algorithm, 'interior-point')
                 options = obj.getOptions();
-                fval = @(x) sum(obj.feval(x, varargin{:}).^2);
-                gval = @(x) 2*obj.fjac(x, varargin{:})'*obj.feval(x, varargin{:});
-                A = [[1,  -1,  0, 0, 0, 0];
-                     [ 0, 1,  -1, 0, 0, 0]];
-                b = [-1e-10; -1e-10];
+                fval = @(x) obj.feval(x,varargin{:});%sum(obj.feval(x, varargin{:}).^2);
+                gval = @(x) obj.fjac(x,varargin{:});%2*obj.fjac(x, varargin{:})'*obj.feval(x, varargin{:});
+                %A = [[1,  -1,  0, 0, 0, 0];
+                %     [ 0, 1,  -1, 0, 0, 0]];
+                %b = [-1e-10; -1e-10];
                 %Aeq = [[1, -1,  0, 0, 0, 0];
                 %       [1,  0, -1, 0, 0, 0]];
                 %beq = [0; 0];   
+                A = [];
+                b = [];
                 Aeq = [];
                 beq = [];
                 lb = [];
                 ub = [];
-                [x,cost,exitFlag,output] = fmincon({fval, gval},x0,A,b,Aeq,beq,lb,ub, [], options);
+                [x,cost,exitFlag,output] = fminunc({fval, gval},x0, options);
             end
         end % of run
     end %of methods
