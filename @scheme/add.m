@@ -88,7 +88,7 @@ function add(obj, varargin)
         
         % check size for dt, delta, and te
         if isscalar(dt)
-            dt = onese(nMeasurements, 1)*dt;
+            dt = ones(nMeasurements, 1)*dt;
         else
             assert(length(dt)==nMeasurements,...
                 'MATLAB:scheme:invalidInputArg',...
@@ -97,7 +97,7 @@ function add(obj, varargin)
         end
         %
         if isscalar(delta)
-            delta = onese(nMeasurements, 1)*delta;
+            delta = ones(nMeasurements, 1)*delta;
         else
             assert(length(delta)==nMeasurements,...
                 'MATLAB:scheme:invalidInputArg',...

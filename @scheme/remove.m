@@ -12,7 +12,7 @@ function remove(obj, idx)
     %% return type: bvalue
     if strcmp(obj.type, 'bvalue')
         % update object 
-        obj.ghat(idx) = [];
+        obj.ghat(idx,:) = [];
         obj.bval(idx) = [];
         
         if ~isempty(obj.ghatCode)
@@ -27,7 +27,7 @@ function remove(obj, idx)
     %% return type: stejskal-tanner
     if strcmp(obj.type, 'stejskal-tanner')
         % update object 
-        obj.ghat(idx) = [];
+        obj.ghat(idx,:) = [];
         obj.gmag(idx) = [];
         obj.dtCode(idx) = [];
         obj.deltaCode(idx) = [];
