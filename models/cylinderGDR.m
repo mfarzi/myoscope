@@ -56,8 +56,8 @@ classdef cylinderGDR < compartment
             % parameters to unconstrained optimisation variables.
             s0      = linker('s0'       , 'bounded', 0    , 1);
             diffPar = linker('diffPar'  , 'bounded', 1e-10, 3e-9);
-            kappa   = linker('kappa'    , 'bounded', 1, 20);
-            nu      = linker('nu'       , 'bounded', 1e-6, 10e-6);
+            kappa   = linker('kappa'    , 'bounded', 1, 100);
+            nu      = linker('nu'       , 'bounded', 0.1e-6, 10e-6);
             theta   = linker('theta');
             phi     = linker('phi');
             obj.links   = [s0; diffPar; kappa; nu; theta; phi];
