@@ -179,6 +179,25 @@ function [rhv, str_expr, str_fh, str_gh] = readExpression(str, varNames, rhv, st
     %       3) multiplication of a parameter by a numeric value
     %       4) multiplication a parameer by another one
     %       5) multiplication two paramters and a number
+    %       6) multiplication of three parameters
+    %       7) division of a numeric input by a parameter
+    
+    % check if it is a number devided by a parameter
+    [operators, expressions] = regexp(str, '/', 'match', 'split');
+    if length(operators)==1
+        isNumber = ~isempty(str2num(expressions{1}));
+        varId = whichVar(expressions{2}, varNames);
+        if isNumber && varId>0
+            rhv = [rhv, varId];
+            n = length(rhv);
+            str_expr = append(str_expr, expressions{1},'/%s');
+            str_fh = append(str_fh, expressions{1}, sprintf('/P(%d)', n));
+            str_gh = append(str_gh, '-1*', expressions{1}, sprintf('*jac(%d,:)/(P(%d)*P(%d))', n, n, n));
+            return;
+        end
+    end
+            
+        
     
     [operators, expressions] = regexp(str, '*', 'match', 'split');
     nOperators = length(operators);
@@ -228,21 +247,35 @@ function [rhv, str_expr, str_fh, str_gh] = readExpression(str, varNames, rhv, st
                 'Uknown input constraint format:%s.', str);
             end
         case 2
-            % three expressions: the first one must be a number and the
-            % second and the third ones must be parameters
+            % three expressions: the first one could be be a number or 
+            % parameter but the second and the third ones must be 
+            % parameters
             isNumber = ~isempty(str2num(expressions{1}));
-            varId1 = whichVar(expressions{2}, varNames);
-            varId2 = whichVar(expressions{3}, varNames);
-            assert(varId1>0 && varId2>0 && isNumber,...
+            varId1 = whichVar(expressions{1}, varNames);
+            varId2 = whichVar(expressions{2}, varNames);
+            varId3 = whichVar(expressions{3}, varNames);
+            assert(varId2>0 && varId3>0 && (isNumber||varId1>0),...
                 'MATLAB:linker:invalidInput',...
-                'Uknown input constraint format:%s.', str);  
-            rhv = [rhv, varId1, varId2];
-            n = length(rhv);
-            str_expr = append(str_expr, expressions{1}, '*%s*%s');
-            str_fh = append(str_fh, expressions{1}, sprintf('*P(%d)*P(%d)', n-1, n));
-            str_gh = append(str_gh, ...
-                expressions{1}, sprintf('*P(%d)*jac(%d,:)+', n-1,n),...
-                expressions{1}, sprintf('*P(%d)*jac(%d,:)', n, n-1));
+                'Uknown input constraint format:%s.', str);
+            if isNumber
+                rhv = [rhv, varId2, varId3];
+                n = length(rhv);
+                str_expr = append(str_expr, expressions{1}, '*%s*%s');
+                str_fh = append(str_fh, expressions{1}, sprintf('*P(%d)*P(%d)', n-1, n));
+                str_gh = append(str_gh, ...
+                    expressions{1}, sprintf('*P(%d)*jac(%d,:)+', n-1,n),...
+                    expressions{1}, sprintf('*P(%d)*jac(%d,:)', n, n-1));
+            else
+                rhv = [rhv, varId1, varId2, varId3];
+                n = length(rhv);
+                str_expr = append(str_expr, '%s*%s*%s');
+                str_fh = append(str_fh, sprintf('P(%d)*P(%d)*P(%d)', n-2, n-1, n));
+                str_gh = append(str_gh, ...
+                    sprintf('jac(%d,:)*P(%d)*P(%d)+', n-2, n-1,n),...
+                    sprintf('P(%d)*jac(%d,:)*P(%d)+', n-2, n-1,n),...
+                    sprintf('P(%d)*P(%d)*jac(%d,:)', n-2, n-1,n));
+            end
+            %    
         otherwise
             error('MATLAB:linker:invalidInput',...
                 'Uknown input constraint format:%s.', str);
